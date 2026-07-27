@@ -26,6 +26,25 @@ type HistoricalResponse struct {
 	OI      []HistoricalOIItem `json:"oi"`
 }
 
+// HistoricalBatchRequest describes one symbol's historical data request for batch fetching.
+type HistoricalBatchRequest struct {
+	Exchange    Exchange
+	SymbolToken string
+	Interval    Timeframe
+	FromDate    string
+	ToDate      string
+}
+
+// HistoricalBatchItem holds the aggregated result for one symbol in a batch fetch.
+type HistoricalBatchItem struct {
+	SymbolToken string              `json:"symbol_token"`
+	Success     bool                `json:"success"`
+	Message     string              `json:"message"`
+	Broker      string              `json:"broker"`
+	Data        *HistoricalResponse `json:"data,omitempty"`
+	Error       string              `json:"error,omitempty"`
+}
+
 type MarketQuoteResponse struct {
 	Exchange       string       `json:"exchange"`
 	TradingSymbol  string       `json:"trading_symbol"`

@@ -14,6 +14,7 @@ type Broker interface {
 	GetHoldings() (*models.Response[[]models.HoldingResponse], error)
 	GetPositions() (*models.Response[[]models.PositionResponse], error)
 	GetHistoricalData(exchange models.Exchange, symbolToken string, interval models.Timeframe, fromDate, toDate string) (*models.Response[models.HistoricalResponse], error)
+	FetchHistoricalDataBatch(requests []models.HistoricalBatchRequest) (*models.Response[[]models.HistoricalBatchItem], error)
 	Logout()
 	GetBrokerageCharges()
 	GetMargin()

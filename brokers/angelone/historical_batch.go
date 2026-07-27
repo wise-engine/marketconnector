@@ -12,15 +12,6 @@ import (
 
 const angeloneDateFormat = "2006-01-02 15:04"
 
-// SymbolRequest describes one symbol's historical data request.
-type SymbolRequest struct {
-	Exchange    models.Exchange
-	SymbolToken string
-	Interval    models.Timeframe
-	FromDate    string
-	ToDate      string
-}
-
 // SymbolBatch represents a single API-call-sized chunk for one symbol.
 type SymbolBatch struct {
 	Exchange    models.Exchange
@@ -39,52 +30,36 @@ type BatchResult struct {
 	Err         error
 }
 
-// HistoricalBatchItem holds the aggregated result for one symbol,
-// using the same response envelope as GetHistoricalData.
-type HistoricalBatchItem struct {
-	SymbolToken string                     `json:"symbol_token"`
-	Success     bool                       `json:"success"`
-	Message     string                     `json:"message"`
-	Broker      string                     `json:"broker"`
-	Data        *models.HistoricalResponse `json:"data,omitempty"`
-	Error       string                     `json:"error,omitempty"`
-}
-
 // splitDateRangeIntoBatches splits a single (fromDate, toDate) range into
 // multiple SymbolBatch entries, each respecting the interval's max-days limit.
-func (a *Angelone) splitDateRangeIntoBatches(
-	exchange models.Exchange,
-	symbolToken string,
-	interval models.Timeframe,
-	fromDate, toDate string,
-) ([]SymbolBatch, error) {
-	maxDays, ok := IntervalMaxDays[interval]
+func (a *Angelone) splitDateRangeIntoBatches(req models.HistoricalBatchRequest) ([]SymbolBatch, error) {
+	maxDays, ok := IntervalMaxDays[req.Interval]
 	if !ok {
-		return nil, fmt.Errorf("unknown interval %q — no max-days mapping", interval)
+		return nil, fmt.Errorf("unknown interval %q — no max-days mapping", req.Interval)
 	}
 
-	from, err := time.Parse(angeloneDateFormat, fromDate)
+	from, err := time.Parse(angeloneDateFormat, req.FromDate)
 	if err != nil {
-		return nil, fmt.Errorf("invalid fromDate %q: %w", fromDate, err)
+		return nil, fmt.Errorf("invalid fromDate %q: %w", req.FromDate, err)
 	}
-	to, err := time.Parse(angeloneDateFormat, toDate)
+	to, err := time.Parse(angeloneDateFormat, req.ToDate)
 	if err != nil {
-		return nil, fmt.Errorf("invalid toDate %q: %w", toDate, err)
+		return nil, fmt.Errorf("invalid toDate %q: %w", req.ToDate, err)
 	}
 
 	if to.Before(from) {
-		return nil, fmt.Errorf("toDate %q is before fromDate %q", toDate, fromDate)
+		return nil, fmt.Errorf("toDate %q is before fromDate %q", req.ToDate, req.FromDate)
 	}
 
 	// Total calendar days (rounded up)
 	totalDays := int(mathCeilDiv(to.Sub(from).Hours(), 24))
 	if totalDays <= maxDays {
 		return []SymbolBatch{{
-			Exchange:    exchange,
-			SymbolToken: symbolToken,
-			Interval:    interval,
-			FromDate:    fromDate,
-			ToDate:      toDate,
+			Exchange:    req.Exchange,
+			SymbolToken: req.SymbolToken,
+			Interval:    req.Interval,
+			FromDate:    req.FromDate,
+			ToDate:      req.ToDate,
 		}}, nil
 	}
 
@@ -97,9 +72,9 @@ func (a *Angelone) splitDateRangeIntoBatches(
 		}
 
 		batches = append(batches, SymbolBatch{
-			Exchange:    exchange,
-			SymbolToken: symbolToken,
-			Interval:    interval,
+			Exchange:    req.Exchange,
+			SymbolToken: req.SymbolToken,
+			Interval:    req.Interval,
 			FromDate:    currentFrom.Format(angeloneDateFormat),
 			ToDate:      currentTo.Format(angeloneDateFormat),
 		})
@@ -136,20 +111,20 @@ func mathCeil(x float64) int {
 //
 // Returns the same response envelope as GetHistoricalData, with Data being
 // a list of per-symbol results.
-func (a *Angelone) FetchHistoricalDataBatch(requests []SymbolRequest) (*models.Response[[]HistoricalBatchItem], error) {
+func (a *Angelone) FetchHistoricalDataBatch(requests []models.HistoricalBatchRequest) (*models.Response[[]models.HistoricalBatchItem], error) {
 	if len(requests) == 0 {
-		return &models.Response[[]HistoricalBatchItem]{
+		return &models.Response[[]models.HistoricalBatchItem]{
 			Success: true,
 			Message: "SUCCESS",
 			Broker:  "angelone",
-			Data:    []HistoricalBatchItem{},
+			Data:    []models.HistoricalBatchItem{},
 		}, nil
 	}
 
 	// ── Step 1: flatten every SymbolRequest into individual day-bounded batches ──
 	var allBatches []SymbolBatch
 	for _, req := range requests {
-		batches, err := a.splitDateRangeIntoBatches(req.Exchange, req.SymbolToken, req.Interval, req.FromDate, req.ToDate)
+		batches, err := a.splitDateRangeIntoBatches(req)
 		if err != nil {
 			return nil, fmt.Errorf("split batch for %s: %w", req.SymbolToken, err)
 		}
@@ -158,11 +133,11 @@ func (a *Angelone) FetchHistoricalDataBatch(requests []SymbolRequest) (*models.R
 
 	totalBatches := len(allBatches)
 	if totalBatches == 0 {
-		return &models.Response[[]HistoricalBatchItem]{
+		return &models.Response[[]models.HistoricalBatchItem]{
 			Success: true,
 			Message: "SUCCESS",
 			Broker:  "angelone",
-			Data:    []HistoricalBatchItem{},
+			Data:    []models.HistoricalBatchItem{},
 		}, nil
 	}
 
@@ -188,13 +163,10 @@ func (a *Angelone) FetchHistoricalDataBatch(requests []SymbolRequest) (*models.R
 
 				batchStart := time.Now()
 				fmt.Printf("  [worker %d] fetching %s [%s → %s]\n", workerID, batch.SymbolToken, batch.FromDate, batch.ToDate)
-				data, err := a.GetHistoricalData(
-					batch.Exchange,
-					batch.SymbolToken,
-					batch.Interval,
-					batch.FromDate,
-					batch.ToDate,
-				)
+				// Call fetchSingleBatch directly instead of GetHistoricalData
+				// to avoid double rate-limiting — the batches are already split
+				// into per-day chunks so no further splitting is needed.
+				data, err := a.fetchSingleBatch(batch)
 				elapsed := time.Since(batchStart).Truncate(time.Millisecond)
 				if err != nil {
 					fmt.Printf("  [worker %d] ❌ %s [%s → %s] after %v: %v\n", workerID, batch.SymbolToken, batch.FromDate, batch.ToDate, elapsed, err)
@@ -225,11 +197,11 @@ func (a *Angelone) FetchHistoricalDataBatch(requests []SymbolRequest) (*models.R
 	close(resultCh)
 
 	// ── Step 3: aggregate results per symbol ──
-	itemsMap := make(map[string]*HistoricalBatchItem, len(requests))
+	itemsMap := make(map[string]*models.HistoricalBatchItem, len(requests))
 	for res := range resultCh {
 		item, ok := itemsMap[res.SymbolToken]
 		if !ok {
-			item = &HistoricalBatchItem{
+			item = &models.HistoricalBatchItem{
 				SymbolToken: res.SymbolToken,
 				Broker:      "angelone",
 			}
@@ -252,12 +224,12 @@ func (a *Angelone) FetchHistoricalDataBatch(requests []SymbolRequest) (*models.R
 		}
 	}
 
-	items := make([]HistoricalBatchItem, 0, len(itemsMap))
+	items := make([]models.HistoricalBatchItem, 0, len(itemsMap))
 	for _, item := range itemsMap {
 		items = append(items, *item)
 	}
 
-	return &models.Response[[]HistoricalBatchItem]{
+	return &models.Response[[]models.HistoricalBatchItem]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",

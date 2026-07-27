@@ -1,11 +1,11 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"time"
 
 	"github.com/sunnyme20/marketconnector/brokers"
-	"github.com/sunnyme20/marketconnector/brokers/angelone"
 	models "github.com/sunnyme20/marketconnector/brokers/model"
 )
 
@@ -55,17 +55,24 @@ func checkWebsocket(broker brokers.Broker) {
 
 func main() {
 
-	clientCode := "YOUR_CLIENT_CODE"
-	apiKey := "YOUR_API_KEY"
-	password := "YOUR_PASSWORD"
-	totp := "YOUR_TOTP"
+	clientCode := flag.String("client", "", "Client code")
+	apiKey := flag.String("apikey", "", "API key")
+	password := flag.String("password", "", "Password")
+	totp := flag.String("totp", "", "TOTP")
+	flag.Parse()
+
+	if *clientCode == "" || *apiKey == "" || *password == "" || *totp == "" {
+		fmt.Println("All flags are required:")
+		flag.PrintDefaults()
+		return
+	}
 
 	broker, err := brokers.NewBroker("angelone")
 
 	if err != nil {
 		fmt.Println("error")
 	}
-	sess, err := broker.NewSession(clientCode, apiKey, password, totp)
+	sess, err := broker.NewSession(*clientCode, *apiKey, *password, *totp)
 	if err != nil {
 		fmt.Println("Login error:", err)
 		return
@@ -102,88 +109,88 @@ func main() {
 	}
 	fmt.Println("Quotes:", quotes)
 
-	data, err := broker.GetHistoricalData(models.ExchangeNSE, "3045", models.Timeframe1Day, "2026-06-01 09:00", "2026-06-30 15:30")
+	data, err := broker.GetHistoricalData(models.ExchangeNSE, "1023", models.Timeframe1Day, "2026-07-15 09:00", "2026-07-18 15:30")
 	if err == nil {
 		fmt.Println(data.Data.Candles)
 		fmt.Println(data.Data.OI)
 	}
 
-	// ────────── Worker-Pool Batch Historical Data Demo ──────────
-	// Type-assert to access the batch method (not on the Broker interface)
-	if angelBroker, ok := broker.(*angelone.Angelone); ok {
-		batchRequests := []angelone.SymbolRequest{
-			{
-				Exchange:    models.ExchangeNSE,
-				SymbolToken: "3045", // SBI
-				Interval:    models.Timeframe1Day,
-				FromDate:    "2026-01-01 09:00",
-				ToDate:      "2026-07-15 15:30", // > 2000 days → auto-split into batches
-			},
-			{
-				Exchange:    models.ExchangeNSE,
-				SymbolToken: "16675", // CANBK (example)
-				Interval:    models.Timeframe1Day,
-				FromDate:    "2026-01-01 09:00",
-				ToDate:      "2026-06-30 15:30",
-			},
-			{
-				Exchange:    models.ExchangeNSE,
-				SymbolToken: "1594", // RELIANCE (example)
-				Interval:    models.Timeframe1Day,
-				FromDate:    "2026-01-01 09:00",
-				ToDate:      "2026-06-30 15:30",
-			},
-		}
+	// // ────────── Worker-Pool Batch Historical Data Demo ──────────
+	// // Type-assert to access the batch method (not on the Broker interface)
+	// if angelBroker, ok := broker.(*angelone.Angelone); ok {
+	// 	batchRequests := []angelone.SymbolRequest{
+	// 		{
+	// 			Exchange:    models.ExchangeNSE,
+	// 			SymbolToken: "3045", // SBI
+	// 			Interval:    models.Timeframe1Day,
+	// 			FromDate:    "2026-01-01 09:00",
+	// 			ToDate:      "2026-07-15 15:30", // > 2000 days → auto-split into batches
+	// 		},
+	// 		{
+	// 			Exchange:    models.ExchangeNSE,
+	// 			SymbolToken: "16675", // CANBK (example)
+	// 			Interval:    models.Timeframe1Day,
+	// 			FromDate:    "2026-01-01 09:00",
+	// 			ToDate:      "2026-06-30 15:30",
+	// 		},
+	// 		{
+	// 			Exchange:    models.ExchangeNSE,
+	// 			SymbolToken: "1594", // RELIANCE (example)
+	// 			Interval:    models.Timeframe1Day,
+	// 			FromDate:    "2026-01-01 09:00",
+	// 			ToDate:      "2026-06-30 15:30",
+	// 		},
+	// 	}
 
-		fmt.Println("\n========== Batch Historical Data (Worker Pool) ==========")
-		fmt.Printf("Dispatching %d symbols with automatic date-range batching...\n", len(batchRequests))
+	// 	fmt.Println("\n========== Batch Historical Data (Worker Pool) ==========")
+	// 	fmt.Printf("Dispatching %d symbols with automatic date-range batching...\n", len(batchRequests))
 
-		start := time.Now()
-		batchResp, err := angelBroker.FetchHistoricalDataBatch(batchRequests)
-		elapsed := time.Since(start)
+	// 	start := time.Now()
+	// 	batchResp, err := angelBroker.FetchHistoricalDataBatch(batchRequests)
+	// 	elapsed := time.Since(start)
 
-		if err != nil {
-			fmt.Printf("Batch fetch error: %v\n", err)
-		} else {
-			fmt.Printf("Completed in %v | Success=%v | Message=%s\n", elapsed, batchResp.Success, batchResp.Message)
-			for _, item := range batchResp.Data {
-				if item.Error != "" {
-					fmt.Printf("  ❌ %s: %s\n", item.SymbolToken, item.Error)
-					continue
-				}
-				fmt.Printf("  ✅ %s: %d candles, %d OI records | success=%v broker=%s\n",
-					item.SymbolToken, len(item.Data.Candles), len(item.Data.OI), item.Success, item.Broker)
-				if len(item.Data.Candles) > 0 {
-					fmt.Printf("     First: %s O=%v H=%v L=%v C=%v V=%d\n",
-						item.Data.Candles[0].Timestamp,
-						item.Data.Candles[0].Open,
-						item.Data.Candles[0].High,
-						item.Data.Candles[0].Low,
-						item.Data.Candles[0].Close,
-						item.Data.Candles[0].Volume,
-					)
-					fmt.Printf("     Last:  %s O=%v H=%v L=%v C=%v V=%d\n",
-						item.Data.Candles[len(item.Data.Candles)-1].Timestamp,
-						item.Data.Candles[len(item.Data.Candles)-1].Open,
-						item.Data.Candles[len(item.Data.Candles)-1].High,
-						item.Data.Candles[len(item.Data.Candles)-1].Low,
-						item.Data.Candles[len(item.Data.Candles)-1].Close,
-						item.Data.Candles[len(item.Data.Candles)-1].Volume,
-					)
-				}
-			}
-		}
-	} else {
-		fmt.Println("Note: broker is not an *angelone.Angelone — skipping batch demo")
-	}
-	// ─────────────────────────────────────────────────────────────
+	// 	if err != nil {
+	// 		fmt.Printf("Batch fetch error: %v\n", err)
+	// 	} else {
+	// 		fmt.Printf("Completed in %v | Success=%v | Message=%s\n", elapsed, batchResp.Success, batchResp.Message)
+	// 		for _, item := range batchResp.Data {
+	// 			if item.Error != "" {
+	// 				fmt.Printf("  ❌ %s: %s\n", item.SymbolToken, item.Error)
+	// 				continue
+	// 			}
+	// 			fmt.Printf("  ✅ %s: %d candles, %d OI records | success=%v broker=%s\n",
+	// 				item.SymbolToken, len(item.Data.Candles), len(item.Data.OI), item.Success, item.Broker)
+	// 			if len(item.Data.Candles) > 0 {
+	// 				fmt.Printf("     First: %s O=%v H=%v L=%v C=%v V=%d\n",
+	// 					item.Data.Candles[0].Timestamp,
+	// 					item.Data.Candles[0].Open,
+	// 					item.Data.Candles[0].High,
+	// 					item.Data.Candles[0].Low,
+	// 					item.Data.Candles[0].Close,
+	// 					item.Data.Candles[0].Volume,
+	// 				)
+	// 				fmt.Printf("     Last:  %s O=%v H=%v L=%v C=%v V=%d\n",
+	// 					item.Data.Candles[len(item.Data.Candles)-1].Timestamp,
+	// 					item.Data.Candles[len(item.Data.Candles)-1].Open,
+	// 					item.Data.Candles[len(item.Data.Candles)-1].High,
+	// 					item.Data.Candles[len(item.Data.Candles)-1].Low,
+	// 					item.Data.Candles[len(item.Data.Candles)-1].Close,
+	// 					item.Data.Candles[len(item.Data.Candles)-1].Volume,
+	// 				)
+	// 			}
+	// 		}
+	// 	}
+	// } else {
+	// 	fmt.Println("Note: broker is not an *angelone.Angelone — skipping batch demo")
+	// }
+	// // ─────────────────────────────────────────────────────────────
 
-	positions, err := broker.GetPositions()
-	if err == nil {
-		for _, p := range positions.Data {
-			fmt.Printf("%s: Buy %d @ %.2f\n", p.TradingSymbol, p.BuyQty, p.BuyAvgPrice)
-		}
-	}
+	// positions, err := broker.GetPositions()
+	// if err == nil {
+	// 	for _, p := range positions.Data {
+	// 		fmt.Printf("%s: Buy %d @ %.2f\n", p.TradingSymbol, p.BuyQty, p.BuyAvgPrice)
+	// 	}
+	// }
 
 	// ---------- WebSocket Example (subscribe to SBI token 3045 on NSE) ----------
 	checkWebsocket(broker)

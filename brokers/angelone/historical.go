@@ -45,19 +45,28 @@ func (a *Angelone) fetchSingleBatch(batch SymbolBatch) (*models.Response[models.
 		})
 	}
 
-	// Fetch OI data
-	var oiResp *HistoricalOIData
-	if err := client.Post(Api.HistoricalOI, req, &oiResp); err != nil {
-		return nil, fmt.Errorf("failed to fetch OI data: %w", err)
-	}
+	// OI data is only relevant for derivatives (NFO/BFO/MCX). Skip it for
+	// cash equity (NSE/BSE) to avoid unnecessary API calls and stay within
+	// the 3 req/s rate limit.
+	var oiItems []models.HistoricalOIItem
+	if batch.Exchange != models.ExchangeNSE && batch.Exchange != models.ExchangeBSE {
+		// Rate-limit between the candle and OI calls — both count toward the
+		// broker's 3 req/s limit.
+		time.Sleep(time.Second / HistoricalRateLimit)
 
-	oiRecords, _ := oiResp.ParseOIData()
-	oiItems := make([]models.HistoricalOIItem, 0, len(oiRecords))
-	for _, item := range oiRecords {
-		oiItems = append(oiItems, models.HistoricalOIItem{
-			Timestamp: item.Time,
-			OI:        item.OI,
-		})
+		var oiResp *HistoricalOIData
+		if err := client.Post(Api.HistoricalOI, req, &oiResp); err != nil {
+			return nil, fmt.Errorf("failed to fetch OI data: %w", err)
+		}
+
+		oiRecords, _ := oiResp.ParseOIData()
+		oiItems = make([]models.HistoricalOIItem, 0, len(oiRecords))
+		for _, item := range oiRecords {
+			oiItems = append(oiItems, models.HistoricalOIItem{
+				Timestamp: item.Time,
+				OI:        item.OI,
+			})
+		}
 	}
 
 	return &models.Response[models.HistoricalResponse]{
@@ -106,7 +115,13 @@ func (a *Angelone) GetHistoricalData(exchange models.Exchange, symbolToken strin
 	}
 
 	// ── Split into day-bounded batches ──
-	batches, err := a.splitDateRangeIntoBatches(exchange, symbolToken, interval, fromDate, toDate)
+	batches, err := a.splitDateRangeIntoBatches(models.HistoricalBatchRequest{
+		Exchange:    exchange,
+		SymbolToken: symbolToken,
+		Interval:    interval,
+		FromDate:    fromDate,
+		ToDate:      toDate,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("split date range: %w", err)
 	}
