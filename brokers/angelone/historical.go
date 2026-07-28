@@ -3,6 +3,8 @@ package angelone
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,7 +12,40 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// retryBaseDelay is the initial backoff delay for 403 rate-limit retries.
+const retryBaseDelay = 500 * time.Millisecond
+
+// postWithRetry calls client.Post and retries with exponential backoff when the
+// server returns a 403 (rate limit exceeded). This prevents transient rate-limit
+// errors from failing the entire batch.
+func (a *Angelone) postWithRetry(client *Client, url string, body, result any) error {
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 500ms, 1s, 2s
+			delay := retryBaseDelay * time.Duration(math.Pow(2, float64(attempt-1)))
+			fmt.Printf("    ⏳ rate limited, retrying in %v (attempt %d/%d)...\n", delay, attempt, maxRetries)
+			time.Sleep(delay)
+		}
+
+		err := client.Post(url, body, result)
+		if err == nil {
+			return nil
+		}
+
+		// Only retry on 403 rate-limit errors; fail fast on everything else.
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "403") || strings.Contains(errMsg, "exceeding access rate") {
+			lastErr = err
+			continue
+		}
+		return err
+	}
+	return fmt.Errorf("rate limit exceeded after %d retries: %w", maxRetries, lastErr)
+}
+
 // fetchSingleBatch performs one raw API call (candles + OI) for a single batch.
+// Retries up to maxRetries times with exponential backoff on 403 rate-limit errors.
 func (a *Angelone) fetchSingleBatch(batch SymbolBatch) (*models.Response[models.HistoricalResponse], error) {
 	client := NewClient(a.ApiKey)
 	client.AccessToken = a.AccessToken
@@ -23,9 +58,9 @@ func (a *Angelone) fetchSingleBatch(batch SymbolBatch) (*models.Response[models.
 		ToDate:      batch.ToDate,
 	}
 
-	// Fetch candle data
+	// Fetch candle data with retry on 403
 	var candleResp *HistoricalCandleData
-	if err := client.Post(Api.Historical, req, &candleResp); err != nil {
+	if err := a.postWithRetry(client, Api.Historical, req, &candleResp); err != nil {
 		return nil, fmt.Errorf("failed to fetch candle data: %w", err)
 	}
 
@@ -47,15 +82,15 @@ func (a *Angelone) fetchSingleBatch(batch SymbolBatch) (*models.Response[models.
 
 	// OI data is only relevant for derivatives (NFO/BFO/MCX). Skip it for
 	// cash equity (NSE/BSE) to avoid unnecessary API calls and stay within
-	// the 3 req/s rate limit.
+	// the rate limit.
 	var oiItems []models.HistoricalOIItem
 	if batch.Exchange != models.ExchangeNSE && batch.Exchange != models.ExchangeBSE {
 		// Rate-limit between the candle and OI calls — both count toward the
-		// broker's 3 req/s limit.
-		time.Sleep(time.Second / HistoricalRateLimit)
+		// broker's rate limit.
+		time.Sleep(time.Duration(float64(time.Second) / HistoricalRateLimit))
 
 		var oiResp *HistoricalOIData
-		if err := client.Post(Api.HistoricalOI, req, &oiResp); err != nil {
+		if err := a.postWithRetry(client, Api.HistoricalOI, req, &oiResp); err != nil {
 			return nil, fmt.Errorf("failed to fetch OI data: %w", err)
 		}
 

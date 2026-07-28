@@ -213,8 +213,9 @@ const (
 // --------------- Rate limits (requests/second) ------------------------
 // Centralised here so all callers use the same values — change in one place.
 const (
-	HistoricalRateLimit = 3 // max requests per second for historical data
-	HistoricalRateBurst = 1 // burst size for rate limiter
+	HistoricalRateLimit = 2.5 // max requests per second for historical data
+	HistoricalRateBurst = 1   // burst size for rate limiter
+	maxRetries          = 3   // max retries on 403 rate-limit errors
 )
 
 // MapExchange converts a broker-agnostic Exchange to AngelOne's API string.
