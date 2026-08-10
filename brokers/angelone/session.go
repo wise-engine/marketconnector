@@ -1,125 +1,123 @@
 package angelone
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 
-	models "github.com/sunnyme20/marketconnector/brokers/model"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
+	"github.com/sunnyme20/marketconnector/model"
 )
 
-type Angelone struct {
-	ClientCode  string
-	ApiKey      string
-	AccessToken string
-	FeedToken   string
-}
+// NewSession authenticates with the Angel One API using client code, API key,
+// password and a TOTP code, and stores the resulting tokens on the broker.
+func (a *Angelone) NewSession(clientCode, apiKey, password, totp string) (*model.Response[model.LoginResponse], error) {
+	a.clientCode = clientCode
+	a.apiKey = apiKey
 
-func (a *Angelone) NewSession(clientcode, apikey, password, totp string) (*models.Response[models.LoginResponse], error) {
-	a.ClientCode = clientcode
-	a.ApiKey = apikey
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken("")
 
-	var resp *LoginResponse
+	req := wire.LoginRequest{
+		ClientCode: clientCode,
+		Password:   password,
+		TOTP:       totp,
+	}
 
-	client := NewClient(a.ApiKey)
-	req := LoginRequest{ClientCode: a.ClientCode, Password: password, TOTP: totp}
-	err := client.Post(Api.Login, req, &resp)
+	var resp wire.LoginResponse
+	if err := httpClient.Post(endpoints.API.Login, req, &resp); err != nil {
+		return nil, err
+	}
+
+	data, err := wire.Decode[wire.LoginData](resp.Envelope, resp.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	a.SetAccessToken(resp.Data.JwtToken)
-	a.SetFeedToken(resp.Data.FeedToken)
-	a.SetClientAccessToken(client, resp.Data.JwtToken)
+	a.SetAccessToken(data.JWTToken)
+	a.SetFeedToken(data.FeedToken)
+	a.SetRefreshToken(data.RefreshToken)
+	httpClient.SetAccessToken(data.JWTToken)
 
-	finalResp := models.Response[models.LoginResponse]{
+	return &model.Response[model.LoginResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data: models.LoginResponse{
-			AccessToken: resp.Data.JwtToken,
-			FeedToken:   resp.Data.FeedToken,
+		Data: model.LoginResponse{
+			AccessToken:  data.JWTToken,
+			FeedToken:    data.FeedToken,
+			RefreshToken: data.RefreshToken,
 		},
+	}, nil
+}
+
+// GetUserProfile returns the profile of the authenticated user. The Angel One
+// getProfile endpoint requires the refresh token obtained at login, passed as a
+// JSON-encoded query parameter.
+func (a *Angelone) GetUserProfile() (*model.Response[model.UserProfileResponse], error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
+
+	if a.refreshToken == "" {
+		return nil, fmt.Errorf("getProfile requires a refresh token; call NewSession first")
 	}
-	return &finalResp, nil
-}
 
-func (a *Angelone) SetClientAccessToken(c *Client, accessToken string) {
-	c.AccessToken = accessToken
-}
+	payload, _ := json.Marshal(map[string]string{"refreshToken": a.refreshToken})
+	query := strings.ReplaceAll(url.QueryEscape(string(payload)), "+", "%20")
+	profileURL := endpoints.API.Profile + "?" + query
 
-func (a *Angelone) SetClientCode(clientcode string) {
-	a.ClientCode = clientcode
-}
+	var resp wire.Profile
+	if err := httpClient.Get(profileURL, nil, &resp); err != nil {
+		return nil, err
+	}
 
-func (a *Angelone) SetApiKey(apikey string) {
-	a.ApiKey = apikey
-}
-
-func (a *Angelone) SetFeedToken(feedToken string) {
-	a.FeedToken = feedToken
-}
-
-func (a *Angelone) SetAccessToken(accessToken string) {
-	a.AccessToken = accessToken
-}
-
-func (a *Angelone) GetAccessToken() (string, error) {
-	return a.AccessToken, nil
-}
-
-func (a *Angelone) GetWebSocket() (models.WebSocketTicker, error) {
-	return NewWebSocket(a.ApiKey, a.ClientCode, a.AccessToken, a.FeedToken), nil
-}
-
-func (a *Angelone) GetUserProfile() (*models.Response[models.UserProfileResponse], error) {
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken // set the token from the session
-	var profile *Profile
-	err := client.Get(Api.Profile, nil, &profile)
+	data, err := wire.Decode[wire.ProfileData](resp.Envelope, resp.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	finalResp := models.Response[models.UserProfileResponse]{
+	return &model.Response[model.UserProfileResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data: models.UserProfileResponse{
-			ClientCode: profile.Data.ClientCode,
-			Username:   profile.Data.Username,
-			Email:      profile.Data.Email,
-			Exchanges:  profile.Data.Exchanges,
-			Products:   profile.Data.Products,
+		Data: model.UserProfileResponse{
+			ClientCode: data.ClientCode,
+			Username:   data.Username,
+			Email:      data.Email,
+			Exchanges:  data.Exchanges,
+			Products:   data.Products,
 		},
-	}
-	return &finalResp, nil
+	}, nil
 }
 
-func (a *Angelone) GetRMSData() (*models.Response[models.FundsResponse], error) {
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken
+// GetRMSData returns the available funds and margin for the account.
+func (a *Angelone) GetRMSData() (*model.Response[model.FundsResponse], error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
 
-	var funds *Funds
-	err := client.Get(Api.RMS, nil, &funds)
+	var resp wire.Funds
+	if err := httpClient.Get(endpoints.API.RMS, nil, &resp); err != nil {
+		return nil, err
+	}
+
+	data, err := wire.Decode[wire.FundsData](resp.Envelope, resp.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	netMargin, _ := strconv.ParseFloat(funds.Data.NetMargin, 64)
-	availableCash, _ := strconv.ParseFloat(funds.Data.AvailableCash, 64)
+	netMargin, _ := strconv.ParseFloat(data.NetMargin, 64)
+	availableCash, _ := strconv.ParseFloat(data.AvailableCash, 64)
 
-	finalResp := models.Response[models.FundsResponse]{
+	return &model.Response[model.FundsResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data: models.FundsResponse{
+		Data: model.FundsResponse{
 			NetMargin:     netMargin,
 			AvailableCash: availableCash,
 		},
-	}
-	return &finalResp, nil
-}
-
-func (a *Angelone) Logout() {
-	fmt.Printf("Fetching RMS data for %s\n", a.ClientCode)
+	}, nil
 }

@@ -3,32 +3,34 @@ package angelone
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
 
-	models "github.com/sunnyme20/marketconnector/brokers/model"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/client"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/util"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
+	"github.com/sunnyme20/marketconnector/model"
 	"golang.org/x/time/rate"
 )
 
 // retryBaseDelay is the initial backoff delay for 403 rate-limit retries.
 const retryBaseDelay = 500 * time.Millisecond
 
-// postWithRetry calls client.Post and retries with exponential backoff when the
-// server returns a 403 (rate limit exceeded). This prevents transient rate-limit
-// errors from failing the entire batch.
-func (a *Angelone) postWithRetry(client *Client, url string, body, result any) error {
+// postWithRetry calls c.Post and retries with exponential backoff when the
+// server returns a 403 (rate limit exceeded). This prevents transient
+// rate-limit errors from failing an entire batch.
+func (a *Angelone) postWithRetry(c *client.Client, url string, body, result any) error {
 	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt <= wire.MaxRetries; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff: 500ms, 1s, 2s
-			delay := retryBaseDelay * time.Duration(math.Pow(2, float64(attempt-1)))
-			fmt.Printf("    ⏳ rate limited, retrying in %v (attempt %d/%d)...\n", delay, attempt, maxRetries)
+			// Exponential backoff: 500ms, 1s, 2s.
+			delay := retryBaseDelay * time.Duration(1<<(attempt-1))
 			time.Sleep(delay)
 		}
 
-		err := client.Post(url, body, result)
+		err := c.Post(url, body, result)
 		if err == nil {
 			return nil
 		}
@@ -41,106 +43,117 @@ func (a *Angelone) postWithRetry(client *Client, url string, body, result any) e
 		}
 		return err
 	}
-	return fmt.Errorf("rate limit exceeded after %d retries: %w", maxRetries, lastErr)
+	return fmt.Errorf("rate limit exceeded after %d retries: %w", wire.MaxRetries, lastErr)
 }
 
 // fetchSingleBatch performs one raw API call (candles + OI) for a single batch.
-// Retries up to maxRetries times with exponential backoff on 403 rate-limit errors.
-func (a *Angelone) fetchSingleBatch(batch SymbolBatch) (*models.Response[models.HistoricalResponse], error) {
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken
+// It retries up to wire.MaxRetries times with exponential backoff on 403
+// rate-limit errors.
+func (a *Angelone) fetchSingleBatch(batch symbolBatch) (*model.Response[model.HistoricalResponse], error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
 
-	req := HistoricalRequest{
-		Exchange:    MapExchange(batch.Exchange),
+	req := wire.HistoricalRequest{
+		Exchange:    wire.MapExchange(batch.Exchange),
 		SymbolToken: batch.SymbolToken,
-		Interval:    MapTimeframe(batch.Interval),
+		Interval:    wire.MapTimeframe(batch.Interval),
 		FromDate:    batch.FromDate,
 		ToDate:      batch.ToDate,
 	}
 
-	// Fetch candle data with retry on 403
-	var candleResp *HistoricalCandleData
-	if err := a.postWithRetry(client, Api.Historical, req, &candleResp); err != nil {
-		return nil, fmt.Errorf("failed to fetch candle data: %w", err)
+	// Fetch candle data with retry on 403.
+	var candleResp wire.HistoricalCandleData
+	if err := a.postWithRetry(httpClient, endpoints.API.Historical, req, &candleResp); err != nil {
+		return nil, fmt.Errorf("fetch candle data: %w", err)
 	}
 
-	records, _ := candleResp.ParseData()
-	var candles []models.HistoricalCandle
+	records, err := candleResp.Candles()
+	if err != nil {
+		return nil, fmt.Errorf("fetch candle data: %w", err)
+	}
+	candles := make([]model.HistoricalCandle, 0, len(records))
 	for _, record := range records {
 		if len(record) < 6 {
 			continue
 		}
-		candles = append(candles, models.HistoricalCandle{
+		candles = append(candles, model.HistoricalCandle{
 			Timestamp: record[0].(string),
-			Open:      toFloat64OrZero(record[1]),
-			High:      toFloat64OrZero(record[2]),
-			Low:       toFloat64OrZero(record[3]),
-			Close:     toFloat64OrZero(record[4]),
-			Volume:    toInt64OrZero(record[5]),
+			Open:      util.ToFloat64OrZero(record[1]),
+			High:      util.ToFloat64OrZero(record[2]),
+			Low:       util.ToFloat64OrZero(record[3]),
+			Close:     util.ToFloat64OrZero(record[4]),
+			Volume:    util.ToInt64OrZero(record[5]),
 		})
 	}
 
-	// OI data is only relevant for derivatives (NFO/BFO/MCX). Skip it for
-	// cash equity (NSE/BSE) to avoid unnecessary API calls and stay within
-	// the rate limit.
-	var oiItems []models.HistoricalOIItem
-	if batch.Exchange != models.ExchangeNSE && batch.Exchange != models.ExchangeBSE {
+	// OI data is only relevant for derivatives (NFO/BFO/MCX). Skip it for cash
+	// equity (NSE/BSE) to avoid unnecessary API calls and stay within the rate
+	// limit.
+	var oiItems []model.HistoricalOIItem
+	if batch.Exchange != model.ExchangeNSE && batch.Exchange != model.ExchangeBSE {
 		// Rate-limit between the candle and OI calls — both count toward the
 		// broker's rate limit.
-		time.Sleep(time.Duration(float64(time.Second) / HistoricalRateLimit))
+		time.Sleep(time.Duration(float64(time.Second) / wire.HistoricalRateLimit))
 
-		var oiResp *HistoricalOIData
-		if err := a.postWithRetry(client, Api.HistoricalOI, req, &oiResp); err != nil {
-			return nil, fmt.Errorf("failed to fetch OI data: %w", err)
+		var oiResp wire.HistoricalOIData
+		if err := a.postWithRetry(httpClient, endpoints.API.HistoricalOI, req, &oiResp); err != nil {
+			return nil, fmt.Errorf("fetch OI data: %w", err)
 		}
 
-		oiRecords, _ := oiResp.ParseOIData()
-		oiItems = make([]models.HistoricalOIItem, 0, len(oiRecords))
+		oiRecords, err := oiResp.OIRecords()
+		if err != nil {
+			return nil, fmt.Errorf("fetch OI data: %w", err)
+		}
+		oiItems = make([]model.HistoricalOIItem, 0, len(oiRecords))
 		for _, item := range oiRecords {
-			oiItems = append(oiItems, models.HistoricalOIItem{
+			oiItems = append(oiItems, model.HistoricalOIItem{
 				Timestamp: item.Time,
 				OI:        item.OI,
 			})
 		}
 	}
 
-	return &models.Response[models.HistoricalResponse]{
+	return &model.Response[model.HistoricalResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data: models.HistoricalResponse{
+		Data: model.HistoricalResponse{
 			Candles: candles,
 			OI:      oiItems,
 		},
 	}, nil
 }
 
-// GetHistoricalData fetches historical data for a single symbol.
-// If the date range exceeds AngelOne's per-request limit for the given interval,
-// it automatically splits the range into batches and fetches them concurrently
-// using a 3-worker pool with a 3 req/s rate limiter, then merges the results.
-func (a *Angelone) GetHistoricalData(exchange models.Exchange, symbolToken string, interval models.Timeframe, fromDate, toDate string) (*models.Response[models.HistoricalResponse], error) {
-	fmt.Printf("Fetching historical data for %s\n", a.ClientCode)
-
-	// Check if the date range needs batching
-	maxDays, ok := IntervalMaxDays[interval]
+// GetHistoricalData fetches historical data for a single symbol. If the date
+// range exceeds the broker's per-request limit for the given interval, it is
+// split into day-bounded batches fetched concurrently by a small worker pool
+// under a rate limit, and the results are merged.
+func (a *Angelone) GetHistoricalData(exchange model.Exchange, symbolToken string, interval model.Timeframe, fromDate, toDate string) (*model.Response[model.HistoricalResponse], error) {
+	maxDays, ok := wire.IntervalMaxDays[interval]
 	if !ok {
-		return nil, fmt.Errorf("unknown interval %q — no max-days mapping", interval)
+		return nil, fmt.Errorf("unknown interval %q: no max-days mapping", interval)
 	}
 
-	from, err := time.Parse(angeloneDateFormat, fromDate)
+	from, err := time.Parse(util.DateFormat, fromDate)
 	if err != nil {
 		return nil, fmt.Errorf("invalid fromDate %q: %w", fromDate, err)
 	}
-	to, err := time.Parse(angeloneDateFormat, toDate)
+	to, err := time.Parse(util.DateFormat, toDate)
 	if err != nil {
 		return nil, fmt.Errorf("invalid toDate %q: %w", toDate, err)
 	}
 
-	totalDays := int(ceilDiv(to.Sub(from).Hours(), 24))
-	if totalDays <= maxDays {
-		// Single batch — use the helper directly
-		return a.fetchSingleBatch(SymbolBatch{
+	req := model.HistoricalBatchRequest{
+		Exchange:    exchange,
+		SymbolToken: symbolToken,
+		Interval:    interval,
+		FromDate:    fromDate,
+		ToDate:      toDate,
+	}
+
+	// Single batch — no splitting needed.
+	if util.DaysBetween(from, to) <= maxDays {
+		return a.fetchSingleBatch(symbolBatch{
 			Exchange:    exchange,
 			SymbolToken: symbolToken,
 			Interval:    interval,
@@ -149,50 +162,28 @@ func (a *Angelone) GetHistoricalData(exchange models.Exchange, symbolToken strin
 		})
 	}
 
-	// ── Split into day-bounded batches ──
-	batches, err := a.splitDateRangeIntoBatches(models.HistoricalBatchRequest{
-		Exchange:    exchange,
-		SymbolToken: symbolToken,
-		Interval:    interval,
-		FromDate:    fromDate,
-		ToDate:      toDate,
-	})
+	// Split into day-bounded batches.
+	batches, err := splitDateRangeIntoBatches(req)
 	if err != nil {
 		return nil, fmt.Errorf("split date range: %w", err)
 	}
 
-	fmt.Printf("Date range exceeds %d-day limit — split into %d batches, fetching with worker pool\n", maxDays, len(batches))
-	for i, b := range batches {
-		fmt.Printf("  batch %d/%d: [%s] %s → %s\n", i+1, len(batches), b.SymbolToken, b.FromDate, b.ToDate)
-	}
-
-	// ── Worker pool (3 workers, 3 req/s) ──
 	const numWorkers = 3
-	jobCh := make(chan SymbolBatch, len(batches))
-	resultCh := make(chan BatchResult, len(batches))
+	jobCh := make(chan symbolBatch, len(batches))
+	resultCh := make(chan batchResult, len(batches))
 
-	limiter := rate.NewLimiter(HistoricalRateLimit, HistoricalRateBurst)
+	limiter := rate.NewLimiter(wire.HistoricalRateLimit, wire.HistoricalRateBurst)
 
 	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func(workerID int) {
+		go func() {
 			defer wg.Done()
 			for batch := range jobCh {
-				// Strict rate limit: blocks until a token is available
-				if err := limiter.Wait(context.Background()); err != nil {
-					fmt.Printf("  [worker %d] ⚠️ rate limiter error: %v\n", workerID, err)
-				}
-				batchStart := time.Now()
-				fmt.Printf("  [worker %d] fetching %s [%s → %s]\n", workerID, batch.SymbolToken, batch.FromDate, batch.ToDate)
+				// Block until the rate limiter allows the next request.
+				_ = limiter.Wait(context.Background())
 				data, err := a.fetchSingleBatch(batch)
-				elapsed := time.Since(batchStart).Truncate(time.Millisecond)
-				if err != nil {
-					fmt.Printf("  [worker %d] ❌ %s [%s → %s] after %v: %v\n", workerID, batch.SymbolToken, batch.FromDate, batch.ToDate, elapsed, err)
-				} else {
-					fmt.Printf("  [worker %d] ✅ %s [%s → %s] in %v: %d candles\n", workerID, batch.SymbolToken, batch.FromDate, batch.ToDate, elapsed, len(data.Data.Candles))
-				}
-				resultCh <- BatchResult{
+				resultCh <- batchResult{
 					SymbolToken: batch.SymbolToken,
 					FromDate:    batch.FromDate,
 					ToDate:      batch.ToDate,
@@ -200,20 +191,19 @@ func (a *Angelone) GetHistoricalData(exchange models.Exchange, symbolToken strin
 					Err:         err,
 				}
 			}
-		}(i)
+		}()
 	}
 
 	for _, batch := range batches {
 		jobCh <- batch
 	}
 	close(jobCh)
-
 	wg.Wait()
 	close(resultCh)
 
-	// ── Merge results ──
-	var allCandles []models.HistoricalCandle
-	var allOI []models.HistoricalOIItem
+	// Merge results.
+	var allCandles []model.HistoricalCandle
+	var allOI []model.HistoricalOIItem
 	var errs []string
 	for res := range resultCh {
 		if res.Err != nil {
@@ -226,67 +216,16 @@ func (a *Angelone) GetHistoricalData(exchange models.Exchange, symbolToken strin
 		}
 	}
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("batch errors (%d/%d failed): %s", len(errs), len(batches), fmtErrList(errs))
+		return nil, fmt.Errorf("batch errors (%d/%d failed): %s", len(errs), len(batches), util.JoinErrors(errs))
 	}
 
-	return &models.Response[models.HistoricalResponse]{
+	return &model.Response[model.HistoricalResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data: models.HistoricalResponse{
+		Data: model.HistoricalResponse{
 			Candles: allCandles,
 			OI:      allOI,
 		},
 	}, nil
-}
-
-func toFloat64OrZero(val any) float64 {
-	v, _ := toFloat64(val)
-	return v
-}
-
-func toInt64OrZero(val any) int64 {
-	v, _ := toInt64(val)
-	return v
-}
-
-func toFloat64(val any) (float64, bool) {
-	switch v := val.(type) {
-	case float64:
-		return v, true
-	default:
-		return 0, false
-	}
-}
-
-func toInt64(val any) (int64, bool) {
-	switch v := val.(type) {
-	case float64:
-		return int64(v), true
-	default:
-		return 0, false
-	}
-}
-
-// ceilDiv rounds up n/d.
-func ceilDiv(n, d float64) int {
-	if n == float64(int(n/d)) {
-		return int(n / d)
-	}
-	if n/d > 0 {
-		return int(n/d) + 1
-	}
-	return int(n / d)
-}
-
-// fmtErrList joins error strings with "; " for readable merge-failure messages.
-func fmtErrList(errs []string) string {
-	s := ""
-	for i, e := range errs {
-		if i > 0 {
-			s += "; "
-		}
-		s += e
-	}
-	return s
 }

@@ -3,7 +3,7 @@
 A **broker-agnostic** Go library for connecting to Indian stock brokers (Angel One, Zerodha, Upstox, etc.). Provides a unified interface for authentication, market data, portfolio management, and WebSocket streaming — write your application logic once, switch brokers with a single config change.
 
 ```go
-broker, _ := brokers.NewBroker("angelone")
+broker, _ := marketconnector.NewBroker("angelone")
 resp, _ := broker.NewSession("clientcode", "apikey", "password", "totp")
 holdings, _ := broker.GetHoldings()
 ```
@@ -51,12 +51,12 @@ import (
     "fmt"
     "log"
 
-    "github.com/sunnyme20/marketconnector/brokers"
-    "github.com/sunnyme20/marketconnector/brokers/model"
+    "github.com/sunnyme20/marketconnector"
+    "github.com/sunnyme20/marketconnector/model"
 )
 
 func main() {
-    broker, err := brokers.NewBroker("angelone")
+    broker, err := marketconnector.NewBroker("angelone")
     if err != nil {
         log.Fatal(err)
     }
@@ -89,8 +89,8 @@ quotes, _ := broker.GetMarketQuote(model.QuoteModeFull, map[model.Exchange][]str
 
 // Historical Data
 hist, _ := broker.GetHistoricalData(
-    "NSE", "2885",
-    string(model.Timeframe1Day),
+    model.ExchangeNSE, "2885",
+    model.Timeframe1Day,
     "2026-06-01 09:00", "2026-07-01 15:30",
 )
 ```
@@ -102,8 +102,8 @@ ws, _ := broker.GetWebSocket()
 
 ws.OnConnect(func() {
     fmt.Println("Connected!")
-    ws.Subscribe(model.ModeLTP, []model.WSTokenGroup{
-        {ExchangeType: model.NseCM, Tokens: []string{"2885", "1394"}},
+    ws.Subscribe(int(model.ModeLTP), []model.WSTokenGroup{
+        {ExchangeType: int(model.WSExchangeNseCM), Tokens: []string{"2885", "1394"}},
     })
 })
 
@@ -126,37 +126,31 @@ ws.Stop()
 
 ```
 marketconnector/
-├── main.go                          # Demo / entry point
-├── go.mod
-├── go.sum
-│
+├── marketconnector.go            # Broker interface + package docs
+├── factory.go                    # NewBroker(), Register(), broker registry
+├── model/                        # Broker-agnostic shared types
+│   ├── common.go                 #   Timeframe, Exchange, QuoteMode, WebSocketTicker
+│   └── response.go               #   Response[T], Holdings, Positions, Quotes, etc.
 ├── brokers/
-│   ├── broker.go                    # Broker interface (core contract)
-│   ├── factory.go                   # NewBroker() factory
-│   │
-│   ├── model/                       # Broker-agnostic shared types
-│   │   ├── common.go                #   Timeframe, Exchange, QuoteMode, WebSocketTicker
-│   │   ├── request.go               #   LoginRequest
-│   │   └── response.go              #   Response[T], Holding, Position, Quote, etc.
-│   │
-│   ├── database/                    # Symbol mapping abstraction (optional)
-│   │   ├── db.go                    #   DB interface + factory
-│   │   ├── postgres.go              #   PostgreSQL stub
-│   │   ├── sqlite.go                #   SQLite stub
-│   │   └── migration/               #   Schema migrations
-│   │
-│   └── angelone/                    # Angel One implementation
-│       ├── client.go                #   HTTP client wrapper
-│       ├── endpoints.go             #   API endpoint constants
-│       ├── model.go                 #   AngelOne-specific types + mapping functions
-│       ├── session.go               #   Login, profile, RMS, logout
-│       ├── holdings.go              #   GetHoldings()
-│       ├── positions.go             #   GetPositions()
-│       ├── quote.go                 #   GetMarketQuote()
-│       ├── historical.go            #   GetHistoricalData()
-│       ├── websocket.go             #   Ticker — SmartAPI WebSocket v2
-│       ├── charges.go               #   Brokerage / margin stubs
-│       └── options.go               #   Option chain / OI stubs
+│   └── angelone/                 # Angel One implementation
+│       ├── angelone.go           #   Angelone struct + token accessors
+│       ├── session.go            #   Login, profile, RMS
+│       ├── holdings.go           #   GetHoldings()
+│       ├── positions.go          #   GetPositions()
+│       ├── quote.go              #   GetMarketQuote()
+│       ├── historical.go         #   GetHistoricalData() + retry/rate-limit
+│       ├── historical_batch.go   #   Batch splitting + worker pool
+│       ├── ws/                   #   WebSocket ticker (package ws)
+│       │   ├── ws.go             #     Ticker lifecycle + streaming
+│       │   └── parse.go          #     Binary packet parsing
+│       └── internal/             #   Internal implementation (not public API)
+│           ├── client/           #     HTTP client wrapper
+│           ├── endpoints/        #     API endpoint URLs
+│           ├── wire/             #     Wire types + mapping functions
+│           └── util/             #     Shared helpers
+└── cmd/
+    └── marketconnector/
+        └── main.go               # Demo CLI (login + data + optional WebSocket)
 ```
 
 ---
@@ -165,48 +159,45 @@ marketconnector/
 
 ### Broker Interface
 
-Every broker must implement `brokers.Broker` (`brokers/broker.go:1`):
+Every broker must implement `marketconnector.Broker` (`marketconnector.go:12`):
 
 ```go
 type Broker interface {
     // Session
-    NewSession(clientcode, apikey, password, totp string) (*models.Response[models.LoginResponse], error)
+    NewSession(clientcode, apikey, password, totp string) (*model.Response[model.LoginResponse], error)
     SetAccessToken(token string)
     SetFeedToken(token string)
     SetClientCode(code string)
-    SetApiKey(key string)
-    GetAccessToken() (string, error)
+    SetAPIKey(key string)
+    GetAccessToken() string
 
     // Account
-    GetUserProfile() (*models.Response[models.UserProfileResponse], error)
-    GetRMSData() (*models.Response[models.FundsResponse], error)
-    Logout()
+    GetUserProfile() (*model.Response[model.UserProfileResponse], error)
+    GetRMSData() (*model.Response[model.FundsResponse], error)
+    Logout() error
 
     // Portfolio
-    GetHoldings() (*models.Response[[]models.HoldingResponse], error)
-    GetPositions() (*models.Response[[]models.PositionResponse], error)
+    GetHoldings() (*model.Response[[]model.HoldingResponse], error)
+    GetPositions() (*model.Response[[]model.PositionResponse], error)
 
     // Market Data
-    GetMarketQuote(mode models.QuoteMode, exchangeTokens map[models.Exchange][]string) (*models.Response[[]models.MarketQuoteResponse], error)
-    GetHistoricalData(exchange, symbolToken, interval, fromDate, toDate string) (*models.Response[models.HistoricalResponse], error)
+    GetMarketQuote(mode model.QuoteMode, exchangeTokens map[model.Exchange][]string) (*model.Response[[]model.MarketQuoteResponse], error)
+    GetHistoricalData(exchange model.Exchange, symbolToken string, interval model.Timeframe, fromDate, toDate string) (*model.Response[model.HistoricalResponse], error)
+    FetchHistoricalDataBatch(requests []model.HistoricalBatchRequest) (*model.Response[[]model.HistoricalBatchItem], error)
 
     // WebSocket
-    GetWebSocket() (models.WebSocketTicker, error)
+    GetWebSocket() (model.WebSocketTicker, error)
 
     // Orders (planned)
     PlaceOrder(...)
     ModifyOrder(...)
     CancelOrder(...)
-
-    // Brokerage
-    GetBrokerageCharges()
-    GetMargin()
 }
 ```
 
 ### Response Wrapper
 
-All API responses use the generic wrapper (`brokers/model/response.go:1`):
+All API responses use the generic wrapper (`model/response.go:3`):
 
 ```go
 type Response[T any] struct {
@@ -219,7 +210,7 @@ type Response[T any] struct {
 
 ### WebSocket Ticker Interface
 
-Real-time data consumers implement `models.WebSocketTicker` (`brokers/model/common.go:1`):
+Real-time data consumers implement `model.WebSocketTicker` (`model/common.go:81`):
 
 ```go
 type WebSocketTicker interface {
@@ -240,17 +231,21 @@ Each broker lives in its own package under `brokers/<brokername>/`:
 
 | File | Responsibility |
 |------|---------------|
-| `client.go` | HTTP client wrapper (headers, auth, base URL) |
-| `endpoints.go` | All API endpoint URLs as constants |
-| `model.go` | Broker-specific request/response structs + mapping functions |
-| `session.go` | Main broker struct (`Angelone`, `Zerodha`, etc.) + methods for session/profile/RMS |
+| `angelone.go` | Main broker struct + token accessors |
+| `session.go` | Session/profile/RMS implementations |
 | `holdings.go` | `GetHoldings()` implementation |
 | `positions.go` | `GetPositions()` implementation |
 | `quote.go` | `GetMarketQuote()` implementation |
-| `historical.go` | `GetHistoricalData()` implementation |
-| `websocket.go` | WebSocket `Ticker` implementation |
-| `charges.go` | Brokerage/margin calculation stubs |
-| `options.go` | Option chain/OI stubs |
+| `historical.go` | `GetHistoricalData()` implementation (retry + rate-limit) |
+| `historical_batch.go` | Date-range splitting + concurrent worker pool |
+| `ws/` | WebSocket `Ticker` (lifecycle + binary packet parsing) |
+| `internal/client/` | HTTP client wrapper (headers, auth, base URL) |
+| `internal/endpoints/` | All API endpoint URLs as constants |
+| `internal/wire/` | Broker-specific wire types + mapping functions |
+| `internal/util/` | Shared helper functions |
+
+Internal packages can only be imported by the `angelone` package itself — they are
+not part of the public API and can change freely.
 
 ---
 
@@ -262,20 +257,20 @@ Each broker lives in its own package under `brokers/<brokername>/`:
 |------------|---------|
 | Exported = PascalCase | `NewSession`, `GetMarketQuote` |
 | Unexported = camelCase | `getLocalIP`, `parseTick` |
-| Acronyms uppercase | `ApiKey`, `AccessToken`, `FeedToken`, `LTP`, `RMS` |
+| Acronyms uppercase | `APIKey`, `AccessToken`, `FeedToken`, `LTP`, `RMS` |
 | Json tags snake_case | `trading_symbol`, `symbol_token` |
 
 ### Error Handling
 
 - Always return `(result, error)` — never swallow errors.
 - Use `fmt.Errorf("...: %w", err)` to wrap errors with context.
-- Parse failures should be logged or returned, not silently zeroed.
+- Parse failures should be returned, not silently zeroed.
 
 ```go
 // Good
-func (a *Angelone) GetHoldings() (*models.Response[[]models.HoldingResponse], error) {
-    var raw angelone.Holdings
-    if err := a.client.Get(url, nil, &raw); err != nil {
+func (a *Angelone) GetHoldings() (*model.Response[[]model.HoldingResponse], error) {
+    var raw holdings
+    if err := a.httpClient().Get(api.Holding, nil, &raw); err != nil {
         return nil, fmt.Errorf("holdings: %w", err)
     }
     // ...
@@ -287,14 +282,14 @@ parseFloat64(s string) float64 { n, _ := strconv.ParseFloat(s, 64); return n }
 
 ### Imports
 
-- Use import aliasing: `models "github.com/sunnyme20/marketconnector/brokers/model"`
+- Import the `model` package without an alias: `"github.com/sunnyme20/marketconnector/model"`.
 - Group standard library, external, and internal imports with blank lines.
 
 ### Struct Embedding
 
 - Broker-specific response types embed a common response struct for status/message/error.
 - Use Go generics (`Response[T]`) for the public-facing API.
-- Keep broker-internal types in the broker package; map to `models.*` types at the boundary.
+- Keep broker-internal wire types in the broker package; map to `model.*` types at the boundary.
 
 ### Testing
 
@@ -314,27 +309,25 @@ parseFloat64(s string) float64 { n, _ := strconv.ParseFloat(s, 64); return n }
 
 2. **Implement the files** following the per-broker structure above.
 
-3. **Define broker-specific types** in `model.go` — request/response structs with `json` tags.
+3. **Define broker-specific wire types** in `model.go` — request/response structs with `json` tags.
 
 4. **Implement mapping functions** in `model.go` to convert:
-   - Your broker's timeframe strings → `models.Timeframe`
-   - Your broker's exchange codes → `models.Exchange`
-   - Your broker's response structs → `models.Response[T]`
+   - Your broker's timeframe strings → `model.Timeframe`
+   - Your broker's exchange codes → `model.Exchange`
+   - Your broker's response structs → `model.Response[T]`
 
-5. **Implement the `Broker` interface** on your main struct in `session.go`.
+5. **Implement the `Broker` interface** on your main struct (e.g. in your broker's root package).
 
-6. **Register the broker** in `brokers/factory.go`:
+6. **Register the broker** in `factory.go`:
    ```go
-   func NewBroker(name string) (Broker, error) {
-       switch name {
-       case "angelone":
-           return &angelone.Angelone{}, nil
-       case "zerodha":
-           return &zerodha.Zerodha{}, nil  // add this line
-       default:
-           return nil, fmt.Errorf("unknown broker: %s", name)
-       }
+   func init() {
+       Register("angelone", func() Broker { return &angelone.Angelone{} })
+       Register("zerodha", func() Broker { return &zerodha.Zerodha{} }) // add this line
    }
+   ```
+   External brokers can also be registered at runtime by consumers:
+   ```go
+   marketconnector.Register("mybroker", func() marketconnector.Broker { return &mybroker.Client{} })
    ```
 
 7. **Write tests** — unit tests for mapping functions, integration test structure (credentials outside repo).
@@ -365,11 +358,9 @@ We welcome contributions! Here's how to get started:
 | Area | How to Help |
 |------|-------------|
 | **New Brokers** | Implement Zerodha, Upstox, 5Paisa, etc. |
-| **Tests** | Add unit tests for existing AngelOne code (especially `parseTick` in `websocket.go`) |
-| **Stubs** | Implement `GetBrokerageCharges()`, `GetMargin()`, `GetOptionChain()`, `GetOptionInterest()` |
-| **Database** | Wire the `database` package into brokers for symbol mapping |
-| **Bug Fixes** | Check [issues](https://github.com/sunnyme20/marketconnector/issues) |
+| **Tests** | Add unit tests for existing AngelOne code (especially `parseTick` in `ws/parse.go`) |
 | **Order APIs** | Add `PlaceOrder`, `ModifyOrder`, `CancelOrder` to the interface |
+| **Bug Fixes** | Check [issues](https://github.com/sunnyme20/marketconnector/issues) |
 
 ### Pull Request Process
 
@@ -384,7 +375,7 @@ We welcome contributions! Here's how to get started:
    ```
 4. Run `gofmt` / `go vet`:
    ```bash
-   go fmt ./... && go vet ./...
+   gofmt -l . && go vet ./...
    ```
 5. Open a PR with a clear title and description.
 

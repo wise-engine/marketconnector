@@ -1,26 +1,29 @@
 package angelone
 
 import (
-	"fmt"
-
-	models "github.com/sunnyme20/marketconnector/brokers/model"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
+	"github.com/sunnyme20/marketconnector/model"
 )
 
-func (a *Angelone) GetHoldings() (*models.Response[[]models.HoldingResponse], error) {
-	fmt.Printf("Fetching holdings for %s\n", a.ClientCode)
+// GetHoldings returns the current holdings of the account.
+func (a *Angelone) GetHoldings() (*model.Response[[]model.HoldingResponse], error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
 
-	var resp *Holdings
+	var resp wire.Holdings
+	if err := httpClient.Get(endpoints.API.Holding, nil, &resp); err != nil {
+		return nil, err
+	}
 
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken
-	err := client.Get(Api.Holding, nil, &resp)
+	items, err := wire.Decode[[]wire.HoldingItem](resp.Envelope, resp.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	var holdings []models.HoldingResponse
-	for _, item := range resp.Data {
-		holdings = append(holdings, models.HoldingResponse{
+	out := make([]model.HoldingResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, model.HoldingResponse{
 			TradingSymbol: item.TradingSymbol,
 			Exchange:      item.Exchange,
 			T1Quantity:    item.T1Quantity,
@@ -37,11 +40,10 @@ func (a *Angelone) GetHoldings() (*models.Response[[]models.HoldingResponse], er
 		})
 	}
 
-	finalResp := models.Response[[]models.HoldingResponse]{
+	return &model.Response[[]model.HoldingResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data:    holdings,
-	}
-	return &finalResp, nil
+		Data:    out,
+	}, nil
 }

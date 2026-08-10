@@ -1,7 +1,10 @@
-package angelone
+// Package endpoints holds the REST and WebSocket URLs for the Angel One
+// SmartAPI. It is internal to the angelone broker implementation.
+package endpoints
 
-const rootEndpoint string = "https://apiconnect.angelone.in"
+const rootEndpoint = "https://apiconnect.angelone.in"
 
+// Endpoint holds the REST and WebSocket URLs for the Angel One SmartAPI.
 type Endpoint struct {
 	Login        string
 	Profile      string
@@ -18,7 +21,8 @@ type Endpoint struct {
 	Websocket    string
 }
 
-var Api = Endpoint{
+// API is the default set of Angel One endpoints.
+var API = Endpoint{
 	Login:        rootEndpoint + "/rest/auth/angelbroking/user/v1/loginByPassword",
 	Profile:      rootEndpoint + "/rest/secure/angelbroking/user/v1/getProfile",
 	RMS:          rootEndpoint + "/rest/secure/angelbroking/user/v1/getRMS",

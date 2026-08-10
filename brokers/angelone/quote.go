@@ -4,50 +4,54 @@ import (
 	"fmt"
 	"sort"
 
-	models "github.com/sunnyme20/marketconnector/brokers/model"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
+	"github.com/sunnyme20/marketconnector/model"
 )
 
 const maxTokensPerRequest = 50
 
-// fetchQuoteBatch calls the AngelOne quote API for a single batch of tokens.
-func (a *Angelone) fetchQuoteBatch(mode models.QuoteMode, exchangeTokens map[string][]string) ([]models.MarketQuoteResponse, error) {
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken
+// fetchQuoteBatch calls the market quote API for a single batch of tokens.
+func (a *Angelone) fetchQuoteBatch(mode model.QuoteMode, exchangeTokens map[string][]string) ([]model.MarketQuoteResponse, error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
 
-	req := QuoteRequest{
+	req := wire.QuoteRequest{
 		Mode:           string(mode),
 		ExchangeTokens: exchangeTokens,
 	}
 
-	var resp *QuoteResponse
-	err := client.Post(Api.Quote, req, &resp)
-	if err != nil {
-		fmt.Println("Error fetching quote", err)
-		return nil, err
+	var resp wire.QuoteResponse
+	if err := httpClient.Post(endpoints.API.Quote, req, &resp); err != nil {
+		return nil, fmt.Errorf("fetch quote: %w", err)
 	}
 
-	var quotes []models.MarketQuoteResponse
-	for _, item := range resp.Data.Fetched {
-		var depth *models.MarketDepth
+	data, err := wire.Decode[wire.QuoteData](resp.Envelope, resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("fetch quote: %w", err)
+	}
+
+	quotes := make([]model.MarketQuoteResponse, 0, len(data.Fetched))
+	for _, item := range data.Fetched {
+		var depth *model.MarketDepth
 		if len(item.Depth.Buy) > 0 || len(item.Depth.Sell) > 0 {
-			depth = &models.MarketDepth{}
+			depth = &model.MarketDepth{}
 			for _, d := range item.Depth.Buy {
-				depth.Buy = append(depth.Buy, models.DepthItem{
+				depth.Buy = append(depth.Buy, model.DepthItem{
 					Quantity: int64(d.Quantity),
 					Price:    d.Price,
 					Orders:   d.Orders,
 				})
 			}
 			for _, d := range item.Depth.Sell {
-				depth.Sell = append(depth.Sell, models.DepthItem{
+				depth.Sell = append(depth.Sell, model.DepthItem{
 					Quantity: int64(d.Quantity),
 					Price:    d.Price,
 					Orders:   d.Orders,
 				})
 			}
 		}
-		// fmt.Println(item)
-		quotes = append(quotes, models.MarketQuoteResponse{
+		quotes = append(quotes, model.MarketQuoteResponse{
 			Exchange:      item.Exchange,
 			TradingSymbol: item.TradingSymbol,
 			SymbolToken:   item.SymbolToken,
@@ -69,13 +73,13 @@ func (a *Angelone) fetchQuoteBatch(mode models.QuoteMode, exchangeTokens map[str
 	return quotes, nil
 }
 
-func (a *Angelone) GetMarketQuote(mode models.QuoteMode, exchangeTokens map[models.Exchange][]string) (*models.Response[[]models.MarketQuoteResponse], error) {
-	fmt.Printf("Fetching market quote for %s\n", a.ClientCode)
-
-	// Flatten all (exchange, token) pairs with deterministic exchange order.
+// GetMarketQuote returns market quotes for the requested exchange tokens,
+// split into batches of up to maxTokensPerRequest tokens per API call.
+func (a *Angelone) GetMarketQuote(mode model.QuoteMode, exchangeTokens map[model.Exchange][]string) (*model.Response[[]model.MarketQuoteResponse], error) {
+	// Flatten all (exchange, token) pairs with a deterministic exchange order.
 	type pair struct {
-		ex    string
-		token string
+		exchange string
+		token    string
 	}
 	exchanges := make([]string, 0, len(exchangeTokens))
 	for ex := range exchangeTokens {
@@ -85,14 +89,13 @@ func (a *Angelone) GetMarketQuote(mode models.QuoteMode, exchangeTokens map[mode
 
 	var all []pair
 	for _, exStr := range exchanges {
-		tokens := exchangeTokens[models.Exchange(exStr)]
+		tokens := exchangeTokens[model.Exchange(exStr)]
 		for _, t := range tokens {
-			all = append(all, pair{ex: exStr, token: t})
+			all = append(all, pair{exchange: exStr, token: t})
 		}
 	}
 
-	// Batch into chunks of maxTokensPerRequest.
-	var allQuotes []models.MarketQuoteResponse
+	var allQuotes []model.MarketQuoteResponse
 	for i := 0; i < len(all); i += maxTokensPerRequest {
 		end := i + maxTokensPerRequest
 		if end > len(all) {
@@ -100,16 +103,16 @@ func (a *Angelone) GetMarketQuote(mode models.QuoteMode, exchangeTokens map[mode
 		}
 		batch := make(map[string][]string)
 		for _, p := range all[i:end] {
-			batch[p.ex] = append(batch[p.ex], p.token)
+			batch[p.exchange] = append(batch[p.exchange], p.token)
 		}
 		quotes, err := a.fetchQuoteBatch(mode, batch)
 		if err != nil {
-			return nil, fmt.Errorf("batch %d: %w", i/maxTokensPerRequest, err)
+			return nil, fmt.Errorf("quote batch %d: %w", i/maxTokensPerRequest, err)
 		}
 		allQuotes = append(allQuotes, quotes...)
 	}
 
-	return &models.Response[[]models.MarketQuoteResponse]{
+	return &model.Response[[]model.MarketQuoteResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",

@@ -1,5 +1,11 @@
-package models
+// Package model defines broker-agnostic types shared by every broker
+// implementation. Brokers map their raw API responses onto these types so that
+// callers get a consistent data shape regardless of which broker they use.
+package model
 
+// Response is the standard response envelope returned by every broker method.
+// Data holds the broker-agnostic result, while Success and Message describe the
+// outcome of the request.
 type Response[T any] struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
@@ -7,6 +13,7 @@ type Response[T any] struct {
 	Data    T      `json:"data"`
 }
 
+// HistoricalCandle is a single OHLCV candle.
 type HistoricalCandle struct {
 	Timestamp string  `json:"timestamp"`
 	Open      float64 `json:"open"`
@@ -16,11 +23,14 @@ type HistoricalCandle struct {
 	Volume    int64   `json:"volume"`
 }
 
+// HistoricalOIItem is a single open-interest data point.
 type HistoricalOIItem struct {
 	Timestamp string `json:"timestamp"`
 	OI        int64  `json:"oi"`
 }
 
+// HistoricalResponse holds the result of a historical data request: OHLCV
+// candles and, for derivatives, open-interest data.
 type HistoricalResponse struct {
 	Candles []HistoricalCandle `json:"candles"`
 	OI      []HistoricalOIItem `json:"oi"`
@@ -45,6 +55,8 @@ type HistoricalBatchItem struct {
 	Error       string              `json:"error,omitempty"`
 }
 
+// MarketQuoteResponse is the broker-agnostic representation of a live market
+// quote or WebSocket tick.
 type MarketQuoteResponse struct {
 	Exchange       string       `json:"exchange"`
 	TradingSymbol  string       `json:"trading_symbol"`
@@ -85,11 +97,14 @@ type MarketDepth struct {
 	Sell []DepthItem `json:"sell"`
 }
 
+// LoginResponse holds the tokens returned by a successful login.
 type LoginResponse struct {
-	AccessToken string `json:"access_token"`
-	FeedToken   string `json:"feed_token"`
+	AccessToken  string `json:"access_token"`
+	FeedToken    string `json:"feed_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
+// UserProfileResponse describes the authenticated user's profile.
 type UserProfileResponse struct {
 	ClientCode string   `json:"client_code"`
 	Username   string   `json:"name"`
@@ -98,11 +113,13 @@ type UserProfileResponse struct {
 	Products   []string `json:"products"`
 }
 
+// FundsResponse holds the available margin and cash for an account.
 type FundsResponse struct {
 	NetMargin     float64 `json:"net_margin"`
 	AvailableCash float64 `json:"available_cash"`
 }
 
+// HoldingResponse describes a single holding in the portfolio.
 type HoldingResponse struct {
 	TradingSymbol string  `json:"trading_symbol"`
 	Exchange      string  `json:"exchange"`
@@ -119,6 +136,7 @@ type HoldingResponse struct {
 	Return        float64 `json:"return"`
 }
 
+// PositionResponse describes a single open position.
 type PositionResponse struct {
 	Exchange      string  `json:"exchange"`
 	SymbolToken   string  `json:"symbol_token"`
@@ -137,16 +155,4 @@ type PositionResponse struct {
 	CFBuyAmount   float64 `json:"cf_buy_amount"`
 	CFSellAmount  float64 `json:"cf_sell_amount"`
 	LotSize       int32   `json:"lot_size"`
-}
-
-type BrokerageCalResponse struct {
-}
-
-type MarginCalResponse struct {
-}
-
-type OptionChainResponse struct {
-}
-
-type OptionInterestResponse struct {
 }

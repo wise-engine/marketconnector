@@ -1,63 +1,54 @@
 package angelone
 
 import (
-	"fmt"
-
-	models "github.com/sunnyme20/marketconnector/brokers/model"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/util"
+	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
+	"github.com/sunnyme20/marketconnector/model"
 )
 
-func (a *Angelone) GetPositions() (*models.Response[[]models.PositionResponse], error) {
-	fmt.Printf("Fetching positions for %s\n", a.ClientCode)
+// GetPositions returns the current open positions of the account.
+func (a *Angelone) GetPositions() (*model.Response[[]model.PositionResponse], error) {
+	httpClient := a.httpClient()
+	httpClient.SetAccessToken(a.accessToken)
 
-	client := NewClient(a.ApiKey)
-	client.AccessToken = a.AccessToken
+	var resp wire.Positions
+	if err := httpClient.Get(endpoints.API.Position, nil, &resp); err != nil {
+		return nil, err
+	}
 
-	var resp *PositionData
-	err := client.Get(Api.Position, nil, &resp)
+	items, err := wire.Decode[[]wire.PositionItem](resp.Envelope, resp.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	var positions []models.PositionResponse
-	for _, item := range resp.Data {
-		positions = append(positions, models.PositionResponse{
+	out := make([]model.PositionResponse, 0, len(items))
+	for _, item := range items {
+		out = append(out, model.PositionResponse{
 			Exchange:      item.Exchange,
 			SymbolToken:   item.SymbolToken,
 			ProductType:   item.ProductType,
 			TradingSymbol: item.TradingSymbol,
-			BuyQty:        parseInt32(item.BuyQty),
-			SellQty:       parseInt32(item.SellQty),
-			BuyAmount:     parseFloat64(item.BuyAmount),
-			SellAmount:    parseFloat64(item.SellAmount),
-			BuyAvgPrice:   parseFloat64(item.BuyAvgPrice),
-			SellAvgPrice:  parseFloat64(item.SellAvgPrice),
-			AvgNetPrice:   parseFloat64(item.AvgNetPrice),
-			NetValue:      parseFloat64(item.NetValue),
-			CFBuyQty:      parseInt32(item.CFBuyQty),
-			CFSellQty:     parseInt32(item.CFSellQty),
-			CFBuyAmount:   parseFloat64(item.CFBuyAmount),
-			CFSellAmount:  parseFloat64(item.CFSellAmount),
-			LotSize:       parseInt32(item.LotSize),
+			BuyQty:        util.ParseInt32(item.BuyQty),
+			SellQty:       util.ParseInt32(item.SellQty),
+			BuyAmount:     util.ParseFloat64(item.BuyAmount),
+			SellAmount:    util.ParseFloat64(item.SellAmount),
+			BuyAvgPrice:   util.ParseFloat64(item.BuyAvgPrice),
+			SellAvgPrice:  util.ParseFloat64(item.SellAvgPrice),
+			AvgNetPrice:   util.ParseFloat64(item.AvgNetPrice),
+			NetValue:      util.ParseFloat64(item.NetValue),
+			CFBuyQty:      util.ParseInt32(item.CFBuyQty),
+			CFSellQty:     util.ParseInt32(item.CFSellQty),
+			CFBuyAmount:   util.ParseFloat64(item.CFBuyAmount),
+			CFSellAmount:  util.ParseFloat64(item.CFSellAmount),
+			LotSize:       util.ParseInt32(item.LotSize),
 		})
 	}
 
-	finalResp := models.Response[[]models.PositionResponse]{
+	return &model.Response[[]model.PositionResponse]{
 		Success: true,
 		Message: "SUCCESS",
 		Broker:  "angelone",
-		Data:    positions,
-	}
-	return &finalResp, nil
-}
-
-func parseInt32(s string) int32 {
-	var val int32
-	fmt.Sscanf(s, "%d", &val)
-	return val
-}
-
-func parseFloat64(s string) float64 {
-	var val float64
-	fmt.Sscanf(s, "%f", &val)
-	return val
+		Data:    out,
+	}, nil
 }
