@@ -3,7 +3,7 @@
 A **broker-agnostic** Go library for connecting to Indian stock brokers (Angel One, Zerodha, Upstox, etc.). Provides a unified interface for authentication, market data, portfolio management, and WebSocket streaming — write your application logic once, switch brokers with a single config change.
 
 ```go
-broker, _ := marketconnector.NewBroker("angelone")
+broker, _ := marketconnector.NewBroker(model.BrokerAngelOne)
 resp, _ := broker.NewSession("clientcode", "apikey", "password", "totp")
 holdings, _ := broker.GetHoldings()
 ```
@@ -56,7 +56,7 @@ import (
 )
 
 func main() {
-    broker, err := marketconnector.NewBroker("angelone")
+    broker, err := marketconnector.NewBroker(model.BrokerAngelOne)
     if err != nil {
         log.Fatal(err)
     }
@@ -318,21 +318,26 @@ parseFloat64(s string) float64 { n, _ := strconv.ParseFloat(s, 64); return n }
 
 5. **Implement the `Broker` interface** on your main struct (e.g. in your broker's root package).
 
-6. **Register the broker** in `factory.go`:
+6. **Add a `model.BrokerName` constant** for the broker in `model/broker.go`, e.g.:
+   ```go
+   BrokerZerodha BrokerName = "zerodha"
+   ```
+7. **Register the broker** in `factory.go`:
    ```go
    func init() {
-       Register("angelone", func() Broker { return &angelone.Angelone{} })
-       Register("zerodha", func() Broker { return &zerodha.Zerodha{} }) // add this line
+       Register(model.BrokerAngelOne, func() Broker { return &angelone.Angelone{} })
+       Register(model.BrokerZerodha, func() Broker { return &zerodha.Zerodha{} }) // add this line
    }
    ```
    External brokers can also be registered at runtime by consumers:
    ```go
-   marketconnector.Register("mybroker", func() marketconnector.Broker { return &mybroker.Client{} })
+   const myBroker = model.BrokerName("mybroker")
+   marketconnector.Register(myBroker, func() marketconnector.Broker { return &mybroker.Client{} })
    ```
 
-7. **Write tests** — unit tests for mapping functions, integration test structure (credentials outside repo).
+8. **Write tests** — unit tests for mapping functions, integration test structure (credentials outside repo).
 
-8. **Create a PR** 🚀
+9. **Create a PR** 🚀
 
 ---
 

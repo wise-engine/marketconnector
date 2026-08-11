@@ -1,13 +1,15 @@
 // Package marketconnector provides a broker-agnostic client for Indian stock
 // brokers (Angel One, Zerodha, Upstox, etc.).
 //
-// A broker is selected by name through [NewBroker]. Each broker implements the
-// [Broker] interface, mapping its broker-specific API onto the common types in
-// the [model] package, so application code can switch brokers without changing.
+// A broker is selected by its [model.BrokerName] through [NewBroker]. Each
+// broker implements the [Broker] interface, mapping its broker-specific API
+// onto the common types in the [model] package, so application code can switch
+// brokers without changing.
 //
-// Additional brokers can be plugged in at runtime with [Register]:
+// Additional brokers can be plugged in at runtime with [Register], using a
+// [model.BrokerName] constant:
 //
-//	marketconnector.Register("zerodha", func() marketconnector.Broker {
+//	marketconnector.Register(model.BrokerName("zerodha"), func() marketconnector.Broker {
 //		return &zerodha.Client{}
 //	})
 package marketconnector

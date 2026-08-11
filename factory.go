@@ -5,15 +5,16 @@ import (
 	"sync"
 
 	"github.com/sunnyme20/marketconnector/brokers/angelone"
+	"github.com/sunnyme20/marketconnector/model"
 )
 
 var (
 	registryMu sync.RWMutex
-	registry   = make(map[string]func() Broker)
+	registry   = make(map[model.BrokerName]func() Broker)
 )
 
 func init() {
-	Register("angelone", func() Broker { return &angelone.Angelone{} })
+	Register(model.BrokerAngelOne, func() Broker { return &angelone.Angelone{} })
 }
 
 // Register makes a broker available to [NewBroker] under the given name. The
@@ -21,7 +22,7 @@ func init() {
 // if the name is already registered or if builder is nil.
 //
 // It is safe to call concurrently with [NewBroker].
-func Register(name string, builder func() Broker) {
+func Register(name model.BrokerName, builder func() Broker) {
 	if builder == nil {
 		panic("marketconnector: Register called with nil builder")
 	}
@@ -35,7 +36,7 @@ func Register(name string, builder func() Broker) {
 
 // NewBroker returns a new broker instance registered under the given name,
 // or an error if no such broker is registered.
-func NewBroker(name string) (Broker, error) {
+func NewBroker(name model.BrokerName) (Broker, error) {
 	registryMu.RLock()
 	builder, ok := registry[name]
 	registryMu.RUnlock()

@@ -80,7 +80,7 @@ func main() {
 		return
 	}
 
-	broker, err := marketconnector.NewBroker("angelone")
+	broker, err := marketconnector.NewBroker(model.BrokerAngelOne)
 
 	if err != nil {
 		fmt.Println("error:", err)

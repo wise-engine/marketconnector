@@ -7,8 +7,8 @@ import (
 )
 
 // Angelone implements the marketconnector.Broker interface for the Angel One
-// SmartAPI. Create an instance via marketconnector.NewBroker("angelone") or by
-// using &Angelone{} directly and then calling NewSession.
+// SmartAPI. Create an instance via marketconnector.NewBroker(model.BrokerAngelOne)
+// or by using &Angelone{} directly and then calling NewSession.
 type Angelone struct {
 	clientCode   string
 	apiKey       string
