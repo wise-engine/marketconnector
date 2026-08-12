@@ -25,7 +25,7 @@ holdings, _ := broker.GetHoldings()
 | Broker | Status | Features |
 |--------|--------|----------|
 | Angel One | ✅ Complete | Login, Profile, Holdings, Positions, Quotes, Historical (candles + OI), WebSocket v2 (SmartAPI), RMS |
-| Zerodha | ❌ Planned | — |
+| Zerodha | ✅ Complete | Login (SDK), Profile, Holdings, Positions, Quotes (LTP/OHLC/Full), Historical (candles + OI), WebSocket (gokiteconnect ticker), RMS |
 | Upstox | ❌ Planned | — |
 | 5Paisa | ❌ Planned | — |
 | ICICI Direct | ❌ Planned | — |
@@ -68,6 +68,26 @@ func main() {
     }
     fmt.Println("Logged in:", resp.Data.AccessToken)
 }
+```
+
+#### Zerodha browser login
+
+Zerodha uses an oauth login flow instead of a password/TOTP. When using the
+concrete `*zerodha.Zerodha` type you can trigger the full browser flow — it
+prints (and opens) the Kite Connect login URL, runs a temporary local callback
+server, captures the `request_token`, and exchanges it for the access token:
+
+```go
+zb := &zerodha.Zerodha{}
+sess, err := zb.LoginWithBrowser("api_key", "api_secret")
+```
+
+The Kite Connect app's redirect URL must be set to
+`http://localhost:8080/api/user/callback/kite/`. You can also pass a
+`request_token` you already have through the interface method:
+
+```go
+resp, err := broker.NewSession(requestToken, apiKey, apiSecret, "")
 ```
 
 ### 2. Fetch Data
@@ -132,22 +152,38 @@ marketconnector/
 │   ├── common.go                 #   Timeframe, Exchange, QuoteMode, WebSocketTicker
 │   └── response.go               #   Response[T], Holdings, Positions, Quotes, etc.
 ├── brokers/
-│   └── angelone/                 # Angel One implementation
-│       ├── angelone.go           #   Angelone struct + token accessors
-│       ├── session.go            #   Login, profile, RMS
+│   ├── angelone/                 # Angel One implementation
+│   │   ├── angelone.go           #   Angelone struct + token accessors
+│   │   ├── session.go            #   Login, profile, RMS
+│   │   ├── holdings.go           #   GetHoldings()
+│   │   ├── positions.go          #   GetPositions()
+│   │   ├── quote.go              #   GetMarketQuote()
+│   │   ├── historical.go         #   GetHistoricalData() + retry/rate-limit
+│   │   ├── historical_batch.go   #   Batch splitting + worker pool
+│   │   ├── ws/                   #   WebSocket ticker (package ws)
+│   │   │   ├── ws.go             #     Ticker lifecycle + streaming
+│   │   │   └── parse.go          #     Binary packet parsing
+│   │   └── internal/             #   Internal implementation (not public API)
+│   │       ├── client/           #     HTTP client wrapper
+│   │       ├── endpoints/        #     API endpoint URLs
+│   │       ├── wire/             #     Wire types + mapping functions
+│   │       └── util/             #     Shared helpers
+│   └── zerodha/                  # Zerodha Kite Connect implementation
+│       ├── zerodha.go            #   Zerodha struct + token accessors
+│       ├── session.go            #   Login (GenerateSession), profile, margins
 │       ├── holdings.go           #   GetHoldings()
 │       ├── positions.go          #   GetPositions()
-│       ├── quote.go              #   GetMarketQuote()
-│       ├── historical.go         #   GetHistoricalData() + retry/rate-limit
+│       ├── quote.go              #   GetMarketQuote() (LTP/OHLC/Full)
+│       ├── historical.go         #   GetHistoricalData() + rate-limit
 │       ├── historical_batch.go   #   Batch splitting + worker pool
 │       ├── ws/                   #   WebSocket ticker (package ws)
-│       │   ├── ws.go             #     Ticker lifecycle + streaming
-│       │   └── parse.go          #     Binary packet parsing
+│       │   ├── ws.go             #     Ticker wrapper over gokiteconnect ticker
+│       │   └── parse.go          #     Tick → common quote conversion
 │       └── internal/             #   Internal implementation (not public API)
-│           ├── client/           #     HTTP client wrapper
-│           ├── endpoints/        #     API endpoint URLs
-│           ├── wire/             #     Wire types + mapping functions
+│           ├── wire/             #     Interval mapping + max-days/rate-limit
 │           └── util/             #     Shared helpers
+│       # NOTE: no internal/client or internal/endpoints — the raw HTTP layer
+│       # is provided by the official gokiteconnect SDK.
 └── cmd/
     └── marketconnector/
         └── main.go               # Demo CLI (login + data + optional WebSocket)
@@ -244,7 +280,13 @@ Each broker lives in its own package under `brokers/<brokername>/`:
 | `internal/wire/` | Broker-specific wire types + mapping functions |
 | `internal/util/` | Shared helper functions |
 
-Internal packages can only be imported by the `angelone` package itself — they are
+The `zerodha` package keeps the same top-level layout (the file names above,
+with `zerodha.go` in place of `angelone.go`), but has **no** `internal/client/`
+or `internal/endpoints/` packages — the raw HTTP layer is handled by the
+official `gokiteconnect` SDK. Its `internal/wire/` holds only the interval
+mapping and per-interval max-days/rate-limit constants.
+
+Internal packages can only be imported by their own broker package — they are
 not part of the public API and can change freely.
 
 ---

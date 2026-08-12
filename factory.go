@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/sunnyme20/marketconnector/brokers/angelone"
+	"github.com/sunnyme20/marketconnector/brokers/zerodha"
 	"github.com/sunnyme20/marketconnector/model"
 )
 
@@ -15,6 +16,7 @@ var (
 
 func init() {
 	Register(model.BrokerAngelOne, func() Broker { return &angelone.Angelone{} })
+	Register(model.BrokerZerodha, func() Broker { return &zerodha.Zerodha{} })
 }
 
 // Register makes a broker available to [NewBroker] under the given name. The

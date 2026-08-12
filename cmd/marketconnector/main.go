@@ -8,6 +8,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sunnyme20/marketconnector"
+	"github.com/sunnyme20/marketconnector/brokers/zerodha"
 	"github.com/sunnyme20/marketconnector/model"
 	"github.com/xlzd/gotp"
 )
@@ -57,36 +58,62 @@ func checkWebsocket(broker marketconnector.Broker) {
 }
 
 func main() {
-	// Load .env if present (e.g. CLIENT_CODE, API_KEY, PASSWORD, TOTP_SECRET).
+	// Load .env if present (e.g. BROKER, CLIENT_CODE, API_KEY, PASSWORD, TOTP_SECRET).
 	_ = godotenv.Load()
 
+	brokerName := flag.String("broker", os.Getenv("BROKER"), "Broker to use: angelone or zerodha")
 	clientCode := flag.String("client", os.Getenv("CLIENT_CODE"), "Client code")
 	apiKey := flag.String("apikey", os.Getenv("API_KEY"), "API key")
 	password := flag.String("password", os.Getenv("PASSWORD"), "Password")
 	totp := flag.String("totp", os.Getenv("TOTP"), "TOTP code")
 	totpCode := flag.String("totpcode", os.Getenv("TOTP_SECRET"), "TOTP secret to generate the code")
+	kiteAPIKey := flag.String("kiteapikey", os.Getenv("ZERODHA_API_KEY"), "Zerodha Kite API key")
+	kiteAPISecret := flag.String("kitesecret", os.Getenv("ZERODHA_API_SECRET"), "Zerodha Kite API secret")
 	ws := flag.Bool("ws", false, "Run the WebSocket streaming example")
 
 	flag.Parse()
+
+	if *brokerName == "" {
+		*brokerName = string(model.BrokerAngelOne)
+	}
 
 	if *totp == "" && *totpCode != "" {
 		totpAuto := gotp.NewDefaultTOTP(*totpCode)
 		*totp = totpAuto.Now()
 	}
 
-	if *clientCode == "" || *apiKey == "" || *password == "" || *totp == "" {
-		fmt.Println("client, apikey, password and totp (or TOTP_SECRET) are required — pass them as flags or in a .env file:")
-		flag.PrintDefaults()
-		return
-	}
-
-	broker, err := marketconnector.NewBroker(model.BrokerAngelOne)
-
+	broker, err := marketconnector.NewBroker(model.BrokerName(*brokerName))
 	if err != nil {
 		fmt.Println("error:", err)
 		return
 	}
-	sess, err := broker.NewSession(*clientCode, *apiKey, *password, *totp)
+
+	// Login differs per broker: Zerodha uses the browser oauth flow, Angel One
+	// uses client code + password + TOTP.
+	var sess *model.Response[model.LoginResponse]
+	switch *brokerName {
+	case string(model.BrokerZerodha):
+		if *kiteAPIKey == "" || *kiteAPISecret == "" {
+			fmt.Println("kiteapikey and kitesecret (or ZERODHA_API_KEY/ZERODHA_API_SECRET) are required for zerodha — pass them as flags or in a .env file:")
+			flag.PrintDefaults()
+			return
+		}
+		zb, ok := broker.(*zerodha.Zerodha)
+		if !ok {
+			fmt.Println("error: broker is not *zerodha.Zerodha")
+			return
+		}
+		// Opens the Kite Connect login URL in a browser and waits for the
+		// callback to capture the request token.
+		sess, err = zb.LoginWithBrowser(*kiteAPIKey, *kiteAPISecret)
+	default: // angelone
+		if *clientCode == "" || *apiKey == "" || *password == "" || *totp == "" {
+			fmt.Println("client, apikey, password and totp (or TOTP_SECRET) are required — pass them as flags or in a .env file:")
+			flag.PrintDefaults()
+			return
+		}
+		sess, err = broker.NewSession(*clientCode, *apiKey, *password, *totp)
+	}
 	if err != nil {
 		fmt.Println("Login error:", err)
 		return
@@ -94,8 +121,6 @@ func main() {
 
 	if sess.Success {
 		fmt.Println("login successful")
-		// fmt.Println("Access token : ", sess.Data.AccessToken)
-		// fmt.Println("Feed token : ", sess.Data.FeedToken)
 		broker.SetAccessToken(sess.Data.AccessToken)
 		broker.SetFeedToken(sess.Data.FeedToken)
 	}
@@ -114,8 +139,17 @@ func main() {
 	}
 	fmt.Println("Holdings:", holdings)
 
+	// Angel One quotes are keyed by instrument token (SBI = 3045); Zerodha
+	// quotes are keyed by trading symbol.
+	quoteSymbol := "3045"
+	histToken := "3045"
+	if *brokerName == string(model.BrokerZerodha) {
+		quoteSymbol = "SBI"
+		histToken = "779521" // SBI NSE instrument token
+	}
+
 	quotes, err := broker.GetMarketQuote(model.QuoteModeFull, map[model.Exchange][]string{
-		model.ExchangeNSE: {"3045"},
+		model.ExchangeNSE: {quoteSymbol},
 	})
 
 	if err != nil {
@@ -123,7 +157,7 @@ func main() {
 	}
 	fmt.Println("Quotes:", quotes)
 
-	data, err := broker.GetHistoricalData(model.ExchangeNSE, "3045", model.Timeframe30Minutes, "2026-07-15 09:00", "2026-07-20 15:30")
+	data, err := broker.GetHistoricalData(model.ExchangeNSE, histToken, model.Timeframe30Minutes, "2026-07-15 09:00", "2026-07-20 15:30")
 	if err == nil {
 		for _, d := range data.Data.Candles {
 			fmt.Println(d.Timestamp, d.Close, d.Volume)

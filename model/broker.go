@@ -12,7 +12,9 @@ const (
 	// BrokerAngelOne is the Angel One SmartAPI broker.
 	BrokerAngelOne BrokerName = "angelone"
 
+	// BrokerZerodha is the Zerodha Kite Connect broker.
+	BrokerZerodha BrokerName = "zerodha"
+
 	// Future brokers should add constants here, e.g.:
-	// BrokerZerodha BrokerName = "zerodha"
-	// BrokerUpstox  BrokerName = "upstox"
+	// BrokerUpstox BrokerName = "upstox"
 )
