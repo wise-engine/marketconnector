@@ -8,7 +8,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/sunnyme20/marketconnector"
-	"github.com/sunnyme20/marketconnector/brokers/zerodha"
 	"github.com/sunnyme20/marketconnector/model"
 	"github.com/xlzd/gotp"
 )
@@ -88,8 +87,8 @@ func main() {
 		return
 	}
 
-	// Login differs per broker: Zerodha uses the browser oauth flow, Angel One
-	// uses client code + password + TOTP.
+	// Login goes through the common NewSession for every broker. For Zerodha
+	// an empty client code makes the broker run its interactive browser login.
 	var sess *model.Response[model.LoginResponse]
 	switch *brokerName {
 	case string(model.BrokerZerodha):
@@ -98,14 +97,9 @@ func main() {
 			flag.PrintDefaults()
 			return
 		}
-		zb, ok := broker.(*zerodha.Zerodha)
-		if !ok {
-			fmt.Println("error: broker is not *zerodha.Zerodha")
-			return
-		}
-		// Opens the Kite Connect login URL in a browser and waits for the
-		// callback to capture the request token.
-		sess, err = zb.LoginWithBrowser(*kiteAPIKey, *kiteAPISecret)
+		// Empty client code → the zerodha broker opens the Kite Connect login
+		// in a browser and captures the request_token via the callback.
+		sess, err = broker.NewSession("", *kiteAPIKey, *kiteAPISecret, "")
 	default: // angelone
 		if *clientCode == "" || *apiKey == "" || *password == "" || *totp == "" {
 			fmt.Println("client, apikey, password and totp (or TOTP_SECRET) are required — pass them as flags or in a .env file:")

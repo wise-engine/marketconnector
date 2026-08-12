@@ -14,11 +14,21 @@ import (
 // login URL redirect) with the api_secret. To keep the broker-agnostic
 // signature, the parameters map as follows:
 //
-//	clientcode = request_token  (from the Kite Connect login redirect URL)
+//	clientcode = request_token (optional; from the Kite Connect login redirect)
 //	apikey     = API key
 //	password   = API secret
 //	totp       = unused
+//
+// When clientcode (request_token) is empty, NewSession runs the interactive
+// browser login flow: it opens the Kite Connect login URL in a browser, waits
+// for the callback redirect to capture the request_token, then exchanges it for
+// the access token.
 func (z *Zerodha) NewSession(requestToken, apiKey, apiSecret, _ string) (*model.Response[model.LoginResponse], error) {
+	// No request token? Run the interactive browser login flow.
+	if requestToken == "" {
+		return z.loginWithBrowser(apiKey, apiSecret)
+	}
+
 	z.clientCode = requestToken
 	z.apiKey = apiKey
 	z.apiSecret = apiSecret

@@ -30,7 +30,15 @@ const (
 	shutdownTimeout = 5 * time.Second
 )
 
-// LoginWithBrowser performs the Kite Connect oauth login flow by opening the
+// LoginWithBrowser is a convenience wrapper around the interactive browser
+// login flow. NewSession calls the same flow automatically when its
+// request_token parameter is empty, so applications can simply use the common
+// NewSession for all brokers.
+func (z *Zerodha) LoginWithBrowser(apiKey, apiSecret string) (*model.Response[model.LoginResponse], error) {
+	return z.loginWithBrowser(apiKey, apiSecret)
+}
+
+// loginWithBrowser performs the Kite Connect oauth login flow by opening the
 // login URL in the default browser and running a temporary local server that
 // captures the request_token from the login redirect. On success the access and
 // refresh tokens are stored on the broker and returned.
@@ -41,7 +49,7 @@ const (
 // The redirect URL registered for the Kite Connect app must be
 // http://localhost:8080/api/user/callback/kite/ so the login redirect reaches
 // the local callback server.
-func (z *Zerodha) LoginWithBrowser(apiKey, apiSecret string) (*model.Response[model.LoginResponse], error) {
+func (z *Zerodha) loginWithBrowser(apiKey, apiSecret string) (*model.Response[model.LoginResponse], error) {
 	z.apiKey = apiKey
 	z.apiSecret = apiSecret
 	z.client = nil
