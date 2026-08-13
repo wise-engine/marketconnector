@@ -4,6 +4,7 @@ package util
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,4 +44,10 @@ func DaysBetween(from, to time.Time) int {
 // JoinErrors joins error strings with "; " for readable merge-failure messages.
 func JoinErrors(errs []string) string {
 	return strings.Join(errs, "; ")
+}
+
+// ParseFloat64 parses s as a float64, returning 0 on empty or invalid input.
+func ParseFloat64(s string) float64 {
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
 }
