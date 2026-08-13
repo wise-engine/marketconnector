@@ -5,7 +5,7 @@
 // are needed here. It is internal to the zerodha broker package.
 package wire
 
-import "github.com/sunnyme20/marketconnector/model"
+import "github.com/wise-engine/marketconnector/model"
 
 // Zerodha historical-data interval codes accepted by the Kite Connect API.
 const (

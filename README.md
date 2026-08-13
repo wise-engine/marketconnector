@@ -35,7 +35,7 @@ holdings, _ := broker.GetHoldings()
 ## Installation
 
 ```bash
-go get github.com/sunnyme20/marketconnector
+go get github.com/wise-engine/marketconnector
 ```
 
 ---
@@ -51,8 +51,8 @@ import (
     "fmt"
     "log"
 
-    "github.com/sunnyme20/marketconnector"
-    "github.com/sunnyme20/marketconnector/model"
+    "github.com/wise-engine/marketconnector"
+    "github.com/wise-engine/marketconnector/model"
 )
 
 func main() {
@@ -324,7 +324,7 @@ parseFloat64(s string) float64 { n, _ := strconv.ParseFloat(s, 64); return n }
 
 ### Imports
 
-- Import the `model` package without an alias: `"github.com/sunnyme20/marketconnector/model"`.
+- Import the `model` package without an alias: `"github.com/wise-engine/marketconnector/model"`.
 - Group standard library, external, and internal imports with blank lines.
 
 ### Struct Embedding
@@ -407,7 +407,7 @@ We welcome contributions! Here's how to get started:
 | **New Brokers** | Implement Zerodha, Upstox, 5Paisa, etc. |
 | **Tests** | Add unit tests for existing AngelOne code (especially `parseTick` in `ws/parse.go`) |
 | **Order APIs** | Add `PlaceOrder`, `ModifyOrder`, `CancelOrder` to the interface |
-| **Bug Fixes** | Check [issues](https://github.com/sunnyme20/marketconnector/issues) |
+| **Bug Fixes** | Check [issues](https://github.com/wise-engine/marketconnector/issues) |
 
 ### Pull Request Process
 

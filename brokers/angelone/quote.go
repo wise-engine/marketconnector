@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/endpoints"
-	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/wire"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/brokers/angelone/internal/endpoints"
+	"github.com/wise-engine/marketconnector/brokers/angelone/internal/wire"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 const maxTokensPerRequest = 50

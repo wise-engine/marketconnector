@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // GetPositions returns the current open positions of the account. Kite Connect

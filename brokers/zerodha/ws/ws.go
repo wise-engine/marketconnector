@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 	"github.com/zerodha/gokiteconnect/v4/models"
 	kiteticker "github.com/zerodha/gokiteconnect/v4/ticker"
 )

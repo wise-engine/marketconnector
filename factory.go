@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sunnyme20/marketconnector/brokers/angelone"
-	"github.com/sunnyme20/marketconnector/brokers/zerodha"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/brokers/angelone"
+	"github.com/wise-engine/marketconnector/brokers/zerodha"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 var (

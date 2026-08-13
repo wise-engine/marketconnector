@@ -10,8 +10,8 @@ package zerodha
 import (
 	"fmt"
 
-	"github.com/sunnyme20/marketconnector/brokers/zerodha/ws"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/brokers/zerodha/ws"
+	"github.com/wise-engine/marketconnector/model"
 	kiteconnect "github.com/zerodha/gokiteconnect/v4"
 )
 

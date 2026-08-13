@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sunnyme20/marketconnector/brokers/zerodha/internal/util"
-	"github.com/sunnyme20/marketconnector/brokers/zerodha/internal/wire"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/brokers/zerodha/internal/util"
+	"github.com/wise-engine/marketconnector/brokers/zerodha/internal/wire"
+	"github.com/wise-engine/marketconnector/model"
 	"golang.org/x/time/rate"
 )
 

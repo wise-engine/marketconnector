@@ -1,9 +1,9 @@
 package angelone
 
 import (
-	"github.com/sunnyme20/marketconnector/brokers/angelone/internal/client"
-	"github.com/sunnyme20/marketconnector/brokers/angelone/ws"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/brokers/angelone/internal/client"
+	"github.com/wise-engine/marketconnector/brokers/angelone/ws"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // Angelone implements the marketconnector.Broker interface for the Angel One

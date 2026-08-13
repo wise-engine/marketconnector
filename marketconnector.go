@@ -14,7 +14,7 @@
 //	})
 package marketconnector
 
-import "github.com/sunnyme20/marketconnector/model"
+import "github.com/wise-engine/marketconnector/model"
 
 // Broker is the common interface implemented by every supported broker.
 // It covers authentication, portfolio data, market data, historical data and

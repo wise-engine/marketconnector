@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 const (

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // errorResponse represents a WebSocket error from Angel One.

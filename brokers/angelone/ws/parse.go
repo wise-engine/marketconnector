@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // parseTick decodes an Angel One WebSocket v2 binary packet into a common

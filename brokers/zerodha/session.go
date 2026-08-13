@@ -3,7 +3,7 @@ package zerodha
 import (
 	"fmt"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // NewSession authenticates with Zerodha and stores the resulting tokens on the

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/sunnyme20/marketconnector"
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector"
+	"github.com/wise-engine/marketconnector/model"
 	"github.com/xlzd/gotp"
 )
 

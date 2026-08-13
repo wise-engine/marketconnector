@@ -1,4 +1,4 @@
-module github.com/sunnyme20/marketconnector
+module github.com/wise-engine/marketconnector
 
 go 1.26.4
 

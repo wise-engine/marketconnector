@@ -3,7 +3,7 @@ package zerodha
 import (
 	"fmt"
 
-	"github.com/sunnyme20/marketconnector/model"
+	"github.com/wise-engine/marketconnector/model"
 )
 
 // GetHoldings returns the current holdings of the account.
