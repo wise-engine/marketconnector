@@ -150,8 +150,8 @@ func download(ctx context.Context, url string) ([]byte, error) {
 
 // GetRawInstruments downloads and returns the raw Angel One instrument list (the
 // OpenAPIScripMaster JSON decoded into []model.AngeloneRawInstrument).
-func (a *Angelone) GetRawInstruments(ctx context.Context) (*model.Response[[]model.AngeloneRawInstrument], error) {
-	content, err := download(ctx, instrumentsURL)
+func (a *Angelone) GetRawInstruments() (*model.Response[[]model.AngeloneRawInstrument], error) {
+	content, err := download(context.Background(), instrumentsURL)
 	if err != nil {
 		slog.Error("angelone: fetching raw instrument list", "error", err)
 		return nil, err
@@ -193,10 +193,10 @@ func ParseAngeloneInstruments(content []byte) ([]model.AngeloneRawInstrument, er
 	return instruments, nil
 }
 
-// GetProcessed downloads the raw Angel One instrument list and converts it to
-// the standardized form, returning the processed instruments.
-func (a *Angelone) GetProcessed(ctx context.Context) (*model.Response[[]model.ProcessedInstrument], error) {
-	raw, err := a.GetRawInstruments(ctx)
+// GetProcessedInstruments downloads the raw Angel One instrument list and
+// converts it to the standardized form, returning the processed instruments.
+func (a *Angelone) GetProcessedInstruments() (*model.Response[[]model.ProcessedInstrument], error) {
+	raw, err := a.GetRawInstruments()
 	if err != nil {
 		return nil, err
 	}

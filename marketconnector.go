@@ -30,6 +30,7 @@ type Broker interface {
 	GetRMSData() (*model.Response[model.FundsResponse], error)
 	GetHoldings() (*model.Response[[]model.HoldingResponse], error)
 	GetPositions() (*model.Response[[]model.PositionResponse], error)
+	GetProcessedInstruments() (*model.Response[[]model.ProcessedInstrument], error)
 	GetHistoricalData(exchange model.Exchange, symbolToken string, interval model.Timeframe, fromDate, toDate string) (*model.Response[model.HistoricalResponse], error)
 	FetchHistoricalDataBatch(requests []model.HistoricalBatchRequest) (*model.Response[[]model.HistoricalBatchItem], error)
 	GetMarketQuote(mode model.QuoteMode, exchangeTokens map[model.Exchange][]string) (*model.Response[[]model.MarketQuoteResponse], error)

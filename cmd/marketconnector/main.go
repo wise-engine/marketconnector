@@ -76,7 +76,7 @@ func main() {
 		*brokerName = string(model.BrokerAngelOne)
 	}
 
-	if *totp == "" && *totpCode != "" {
+	if *totpCode != "" {
 		totpAuto := gotp.NewDefaultTOTP(*totpCode)
 		*totp = totpAuto.Now()
 	}
@@ -132,6 +132,13 @@ func main() {
 		return
 	}
 	fmt.Println("Holdings:", holdings)
+
+	processed, err := broker.GetProcessedInstruments()
+	if err != nil {
+		fmt.Println("Processed instruments error:", err)
+		return
+	}
+	fmt.Printf("Processed instruments (%s): %d total\n", processed.Broker, len(processed.Data))
 
 	// Angel One quotes are keyed by instrument token (SBI = 3045); Zerodha
 	// quotes are keyed by trading symbol.

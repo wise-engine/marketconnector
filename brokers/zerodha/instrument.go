@@ -96,8 +96,8 @@ func download(ctx context.Context, url string) ([]byte, error) {
 
 // GetRawInstruments downloads and returns the raw Zerodha instrument list (the public Kite
 // instruments CSV decoded into []model.ZerodhaRawInstrument).
-func (z *Zerodha) GetRawInstruments(ctx context.Context) (*model.Response[[]model.ZerodhaRawInstrument], error) {
-	content, err := download(ctx, instrumentsURL)
+func (z *Zerodha) GetRawInstruments() (*model.Response[[]model.ZerodhaRawInstrument], error) {
+	content, err := download(context.Background(), instrumentsURL)
 	if err != nil {
 		slog.Error("zerodha: fetching raw instrument list", "error", err)
 		return nil, err
@@ -163,10 +163,10 @@ func ParseZerodhaInstruments(content []byte) ([]model.ZerodhaRawInstrument, erro
 	return instruments, nil
 }
 
-// GetProcessed downloads the raw Zerodha instrument list and converts it to the
-// standardized form, returning the processed instruments.
-func (z *Zerodha) GetProcessed(ctx context.Context) (*model.Response[[]model.ProcessedInstrument], error) {
-	raw, err := z.GetRawInstruments(ctx)
+// GetProcessedInstruments downloads the raw Zerodha instrument list and converts
+// it to the standardized form, returning the processed instruments.
+func (z *Zerodha) GetProcessedInstruments() (*model.Response[[]model.ProcessedInstrument], error) {
+	raw, err := z.GetRawInstruments()
 	if err != nil {
 		return nil, err
 	}
