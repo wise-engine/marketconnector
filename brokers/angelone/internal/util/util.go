@@ -3,6 +3,8 @@
 package util
 
 import (
+	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +51,23 @@ func ToFloat64OrZero(val any) float64 {
 func ToInt64OrZero(val any) int64 {
 	v, _ := toInt64(val)
 	return v
+}
+
+// OIToInt64 converts an open-interest JSON number into an int64. Angel One
+// returns integer-valued floats (e.g. "1.567111E7", "214800.0") that cannot
+// be decoded directly into an int64, so this falls back to a float parse and
+// rounds to the nearest integer.
+func OIToInt64(n json.Number) int64 {
+	if n == "" {
+		return 0
+	}
+	if i, err := n.Int64(); err == nil {
+		return i
+	}
+	if f, err := n.Float64(); err == nil {
+		return int64(math.Round(f))
+	}
+	return 0
 }
 
 // toFloat64 returns val as a float64.

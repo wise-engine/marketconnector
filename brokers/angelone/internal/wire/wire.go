@@ -235,10 +235,13 @@ func (h *HistoricalCandleData) Candles() ([][]any, error) {
 	return records, nil
 }
 
-// HistoricalOIItemRaw is a single open-interest record.
+// HistoricalOIItemRaw is a single open-interest record. OI is kept as a raw
+// JSON number because Angel One returns integer-valued floats (e.g.
+// "1.567111E7" or "214800.0") that encoding/json refuses to decode into an
+// int64 directly.
 type HistoricalOIItemRaw struct {
-	Time string `json:"time"`
-	OI   int64  `json:"oi"`
+	Time string      `json:"time"`
+	OI   json.Number `json:"oi"`
 }
 
 // HistoricalOIData is the raw response of the getOIData endpoint.

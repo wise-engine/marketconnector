@@ -108,7 +108,7 @@ func (a *Angelone) fetchSingleBatch(batch symbolBatch) (*model.Response[model.Hi
 		for _, item := range oiRecords {
 			oiItems = append(oiItems, model.HistoricalOIItem{
 				Timestamp: item.Time,
-				OI:        item.OI,
+				OI:        util.OIToInt64(item.OI),
 			})
 		}
 	}
