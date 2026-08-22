@@ -401,6 +401,28 @@ func (t *Ticker) Subscribe(mode int, tokenList []model.WSTokenGroup) error {
 
 // Unsubscribe unsubscribes from the given tokens.
 func (t *Ticker) Unsubscribe(tokenList []model.WSTokenGroup) error {
+	// Drop the removed tokens from the stored subscription so a reconnect
+	// resubscribes only what is still wanted (never the just-unsubscribed set).
+	remove := make(map[string]bool)
+	for _, g := range tokenList {
+		for _, tk := range g.Tokens {
+			remove[tk] = true
+		}
+	}
+	kept := t.subscribedTokens[:0]
+	for _, g := range t.subscribedTokens {
+		toks := g.Tokens[:0]
+		for _, tk := range g.Tokens {
+			if !remove[tk] {
+				toks = append(toks, tk)
+			}
+		}
+		if len(toks) > 0 {
+			kept = append(kept, model.WSTokenGroup{ExchangeType: g.ExchangeType, Tokens: toks})
+		}
+	}
+	t.subscribedTokens = kept
+
 	if t.conn == nil {
 		return nil
 	}
