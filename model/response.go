@@ -150,6 +150,12 @@ type PositionResponse struct {
 	SellAvgPrice  float64 `json:"sell_avg_price"`
 	AvgNetPrice   float64 `json:"avg_net_price"`
 	NetValue      float64 `json:"net_value"`
+	NetQty        int32   `json:"net_qty"`
+	LTP           float64 `json:"ltp"`
+	Close         float64 `json:"close"`
+	Pnl           float64 `json:"pnl"`
+	Realised      float64 `json:"realised"`
+	Unrealised    float64 `json:"unrealised"`
 	CFBuyQty      int32   `json:"cf_buy_qty"`
 	CFSellQty     int32   `json:"cf_sell_qty"`
 	CFBuyAmount   float64 `json:"cf_buy_amount"`

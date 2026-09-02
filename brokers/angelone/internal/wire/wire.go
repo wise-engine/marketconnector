@@ -132,6 +132,12 @@ type PositionItem struct {
 	SellAvgPrice  string `json:"sellavgprice"`
 	AvgNetPrice   string `json:"avgnetprice"`
 	NetValue      string `json:"netvalue"`
+	NetQty        string `json:"netqty"`
+	LTP           string `json:"ltp"`
+	Close         string `json:"close"`
+	Pnl           string `json:"pnl"`
+	Realised      string `json:"realised"`
+	Unrealised    string `json:"unrealised"`
 	CFBuyQty      string `json:"cfbuyqty"`
 	CFSellQty     string `json:"cfsellqty"`
 	CFBuyAmount   string `json:"cfbuyamount"`

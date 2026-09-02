@@ -32,6 +32,12 @@ func (z *Zerodha) GetPositions() (*model.Response[[]model.PositionResponse], err
 			SellAvgPrice:  p.SellPrice,
 			AvgNetPrice:   p.AveragePrice,
 			NetValue:      p.Value,
+			NetQty:        int32(p.BuyQuantity - p.SellQuantity),
+			LTP:           p.LastPrice,
+			Close:         p.ClosePrice,
+			Pnl:           p.PnL,
+			Realised:      p.Realised,
+			Unrealised:    p.Unrealised,
 			// Carry-forward = net minus today's day positions.
 			CFBuyQty:     int32(p.BuyQuantity - p.DayBuyQuantity),
 			CFSellQty:    int32(p.SellQuantity - p.DaySellQuantity),
