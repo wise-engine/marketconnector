@@ -121,19 +121,21 @@ type FundsResponse struct {
 
 // HoldingResponse describes a single holding in the portfolio.
 type HoldingResponse struct {
-	TradingSymbol string  `json:"trading_symbol"`
-	Exchange      string  `json:"exchange"`
-	T1Quantity    int32   `json:"t1_quantity"`
-	Quantity      int32   `json:"quantity"`
-	Product       string  `json:"product"`
-	AveragePrice  float64 `json:"average_price"`
-	LTP           float64 `json:"ltp"`
-	Close         float64 `json:"close"`
-	Pnl           float64 `json:"pnl"`
-	PnlPct        float32 `json:"pnl_pct"`
-	Investment    float64 `json:"investment"`
-	Current       float64 `json:"current"`
-	Return        float64 `json:"return"`
+	TradingSymbol    string  `json:"trading_symbol"`
+	Exchange         string  `json:"exchange"`
+	T1Quantity       int32   `json:"t1_quantity"`
+	Quantity         int32   `json:"quantity"`
+	Product          string  `json:"product"`
+	AveragePrice     float64 `json:"average_price"`
+	LTP              float64 `json:"ltp"`
+	Close            float64 `json:"close"`
+	Pnl              float64 `json:"pnl"`
+	PnlPct           float32 `json:"pnl_pct"`
+	Investment       float64 `json:"investment"`
+	Current          float64 `json:"current"`
+	Return           float64 `json:"return"`
+	RealisedQuantity int32   `json:"realised_quantity"`
+	OpeningQuantity  int32   `json:"opening_quantity"`
 }
 
 // PositionResponse describes a single open position.

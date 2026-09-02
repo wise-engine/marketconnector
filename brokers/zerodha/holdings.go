@@ -16,19 +16,21 @@ func (z *Zerodha) GetHoldings() (*model.Response[[]model.HoldingResponse], error
 	out := make([]model.HoldingResponse, 0, len(holdings))
 	for _, h := range holdings {
 		out = append(out, model.HoldingResponse{
-			TradingSymbol: h.Tradingsymbol,
-			Exchange:      h.Exchange,
-			T1Quantity:    int32(h.T1Quantity),
-			Quantity:      int32(h.Quantity),
-			Product:       h.Product,
-			AveragePrice:  h.AveragePrice,
-			LTP:           h.LastPrice,
-			Close:         h.ClosePrice,
-			Pnl:           h.PnL,
-			PnlPct:        float32(h.DayChangePercentage),
-			Investment:    h.AveragePrice * float64(h.Quantity),
-			Current:       h.ClosePrice * float64(h.Quantity),
-			Return:        (h.ClosePrice - h.AveragePrice) * float64(h.Quantity),
+			TradingSymbol:    h.Tradingsymbol,
+			Exchange:         h.Exchange,
+			T1Quantity:       int32(h.T1Quantity),
+			Quantity:         int32(h.Quantity),
+			Product:          h.Product,
+			AveragePrice:     h.AveragePrice,
+			LTP:              h.LastPrice,
+			Close:            h.ClosePrice,
+			Pnl:              h.PnL,
+			PnlPct:           float32(h.DayChangePercentage),
+			Investment:       h.AveragePrice * float64(h.Quantity),
+			Current:          h.ClosePrice * float64(h.Quantity),
+			Return:           (h.ClosePrice - h.AveragePrice) * float64(h.Quantity),
+			RealisedQuantity: int32(h.RealisedQuantity),
+			OpeningQuantity:  int32(h.OpeningQuantity),
 		})
 	}
 

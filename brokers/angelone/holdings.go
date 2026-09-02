@@ -24,19 +24,20 @@ func (a *Angelone) GetHoldings() (*model.Response[[]model.HoldingResponse], erro
 	out := make([]model.HoldingResponse, 0, len(items))
 	for _, item := range items {
 		out = append(out, model.HoldingResponse{
-			TradingSymbol: item.TradingSymbol,
-			Exchange:      item.Exchange,
-			T1Quantity:    item.T1Quantity,
-			Quantity:      item.Quantity,
-			Product:       item.Product,
-			AveragePrice:  item.AveragePrice,
-			LTP:           item.LTP,
-			Close:         item.Close,
-			Pnl:           item.Pnl,
-			PnlPct:        item.PnlPct,
-			Investment:    item.AveragePrice * float64(item.Quantity),
-			Current:       item.Close * float64(item.Quantity),
-			Return:        (item.Close - item.AveragePrice) * float64(item.Quantity),
+			TradingSymbol:    item.TradingSymbol,
+			Exchange:         item.Exchange,
+			T1Quantity:       item.T1Quantity,
+			Quantity:         item.Quantity,
+			Product:          item.Product,
+			AveragePrice:     item.AveragePrice,
+			LTP:              item.LTP,
+			Close:            item.Close,
+			Pnl:              item.Pnl,
+			PnlPct:           item.PnlPct,
+			Investment:       item.AveragePrice * float64(item.Quantity),
+			Current:          item.Close * float64(item.Quantity),
+			Return:           (item.Close - item.AveragePrice) * float64(item.Quantity),
+			RealisedQuantity: item.RealisedQuantity,
 		})
 	}
 

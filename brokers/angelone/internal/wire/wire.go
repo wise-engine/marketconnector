@@ -98,16 +98,17 @@ type Funds struct {
 
 // HoldingItem is a single holding in the getHolding response data.
 type HoldingItem struct {
-	TradingSymbol string  `json:"tradingsymbol"`
-	Exchange      string  `json:"exchange"`
-	T1Quantity    int32   `json:"t1quantity"`
-	Quantity      int32   `json:"quantity"`
-	Product       string  `json:"product"`
-	AveragePrice  float64 `json:"averageprice"`
-	LTP           float64 `json:"ltp"`
-	Close         float64 `json:"close"`
-	Pnl           float64 `json:"profitandloss"`
-	PnlPct        float32 `json:"pnlpercentage"`
+	TradingSymbol    string  `json:"tradingsymbol"`
+	Exchange         string  `json:"exchange"`
+	T1Quantity       int32   `json:"t1quantity"`
+	Quantity         int32   `json:"quantity"`
+	RealisedQuantity int32   `json:"realisedquantity"`
+	Product          string  `json:"product"`
+	AveragePrice     float64 `json:"averageprice"`
+	LTP              float64 `json:"ltp"`
+	Close            float64 `json:"close"`
+	Pnl              float64 `json:"profitandloss"`
+	PnlPct           float32 `json:"pnlpercentage"`
 }
 
 // Holdings is the raw response of the getHolding endpoint.
