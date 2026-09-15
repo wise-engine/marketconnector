@@ -3,6 +3,7 @@ package angelone
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -97,19 +98,19 @@ func (a *Angelone) fetchSingleBatch(batch symbolBatch) (*model.Response[model.Hi
 
 		var oiResp wire.HistoricalOIData
 		if err := a.postWithRetry(httpClient, endpoints.API.HistoricalOI, req, &oiResp); err != nil {
-			return nil, fmt.Errorf("fetch OI data: %w", err)
-		}
-
-		oiRecords, err := oiResp.OIRecords()
-		if err != nil {
-			return nil, fmt.Errorf("fetch OI data: %w", err)
-		}
-		oiItems = make([]model.HistoricalOIItem, 0, len(oiRecords))
-		for _, item := range oiRecords {
-			oiItems = append(oiItems, model.HistoricalOIItem{
-				Timestamp: item.Time,
-				OI:        util.OIToInt64(item.OI),
-			})
+			// OI is supplementary; some instruments (e.g. certain MCX contracts)
+			// reject the request. Return the candle data rather than failing.
+			slog.Warn("angelone: fetch OI data", "exchange", batch.Exchange, "symbol_token", batch.SymbolToken, "error", err)
+		} else if oiRecords, err := oiResp.OIRecords(); err != nil {
+			slog.Warn("angelone: decode OI data", "exchange", batch.Exchange, "symbol_token", batch.SymbolToken, "error", err)
+		} else {
+			oiItems = make([]model.HistoricalOIItem, 0, len(oiRecords))
+			for _, item := range oiRecords {
+				oiItems = append(oiItems, model.HistoricalOIItem{
+					Timestamp: item.Time,
+					OI:        util.OIToInt64(item.OI),
+				})
+			}
 		}
 	}
 
