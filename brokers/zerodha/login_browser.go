@@ -19,8 +19,8 @@ const (
 	defaultCallbackPort = "8080"
 
 	// defaultCallbackPath is the path the Kite Connect app's redirect URL must
-	// point at: http://localhost:8080/api/user/callback/kite/.
-	defaultCallbackPath = "/api/user/callback/kite/"
+	// point at: http://localhost:8080/kite/.
+	defaultCallbackPath = "/kite/"
 
 	// defaultLoginTimeout bounds how long the login flow waits for the browser
 	// redirect to reach the local callback server.
@@ -47,7 +47,7 @@ func (z *Zerodha) LoginWithBrowser(apiKey, apiSecret string) (*model.Response[mo
 // apiSecret is the Kite Connect API secret.
 //
 // The redirect URL registered for the Kite Connect app must be
-// http://localhost:8080/api/user/callback/kite/ so the login redirect reaches
+// http://localhost:8080/kite/ so the login redirect reaches
 // the local callback server.
 func (z *Zerodha) loginWithBrowser(apiKey, apiSecret string) (*model.Response[model.LoginResponse], error) {
 	z.apiKey = apiKey
