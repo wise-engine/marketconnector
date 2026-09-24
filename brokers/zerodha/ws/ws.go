@@ -100,6 +100,48 @@ func (t *Ticker) Subscribe(mode int, tokenList []model.WSTokenGroup) error {
 	return t.applySubscription()
 }
 
+// Unsubscribe unsubscribes from the given tokens. Kite Connect's protocol
+// drops instruments only via a dedicated unsubscribe message — Subscribe is
+// incremental (it only adds), so there is no "re-send the rest to drop" trick.
+// The stored subscription is pruned so a reconnect resubscribes only what is
+// still wanted, never the just-unsubscribed set.
+func (t *Ticker) Unsubscribe(tokenList []model.WSTokenGroup) error {
+	remove := make(map[string]struct{})
+	for _, g := range tokenList {
+		for _, tk := range g.Tokens {
+			remove[tk] = struct{}{}
+		}
+	}
+	t.mu.Lock()
+	kept := t.subscribedTokens[:0]
+	for _, g := range t.subscribedTokens {
+		var toks []string
+		for _, tk := range g.Tokens {
+			if _, rm := remove[tk]; rm {
+				continue
+			}
+			toks = append(toks, tk)
+		}
+		if len(toks) > 0 {
+			kept = append(kept, model.WSTokenGroup{ExchangeType: g.ExchangeType, Tokens: toks})
+		}
+	}
+	t.subscribedTokens = kept
+	t.mu.Unlock()
+
+	if t.ticker.Conn == nil {
+		return nil
+	}
+	flat, err := flattenTokens(tokenList)
+	if err != nil {
+		return err
+	}
+	if len(flat) == 0 {
+		return nil
+	}
+	return t.ticker.Unsubscribe(flat)
+}
+
 // applySubscription sends the stored subscription to the underlying ticker if
 // the connection is live, otherwise stores it for the next connect.
 func (t *Ticker) applySubscription() error {
