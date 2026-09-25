@@ -30,9 +30,12 @@ func (z *Zerodha) fetchSingleBatch(batch symbolBatch) (*model.Response[model.His
 		return nil, err
 	}
 
+	// continuous=true so NFO/MCX futures return candle records for expired
+	// contracts of the same instrument (the exchange flushes the instrument
+	// token every expiry; continuous chains them via a live contract's token).
 	// OI=true always: for cash equities the OI column is 0 and yields no OI
 	// items, while derivatives get their open interest populated.
-	records, err := z.kite().GetHistoricalData(token, wire.MapTimeframe(batch.Interval), from, to, false, true)
+	records, err := z.kite().GetHistoricalData(token, wire.MapTimeframe(batch.Interval), from, to, true, true)
 	if err != nil {
 		return nil, fmt.Errorf("fetch historical data: %w", err)
 	}
