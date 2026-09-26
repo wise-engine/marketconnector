@@ -30,12 +30,21 @@ func (z *Zerodha) fetchSingleBatch(batch symbolBatch) (*model.Response[model.His
 		return nil, err
 	}
 
-	// continuous=true so NFO/MCX futures return candle records for expired
-	// contracts of the same instrument (the exchange flushes the instrument
-	// token every expiry; continuous chains them via a live contract's token).
+	// continuous=true for NFO/MCX futures so they return candle records for
+	// expired contracts of the same instrument (the exchange flushes the
+	// instrument token every expiry; continuous chains them via a live
+	// contract's token). Kite rejects continuous for cash equity, so NSE/BSE
+	// are sent false.
 	// OI=true always: for cash equities the OI column is 0 and yields no OI
 	// items, while derivatives get their open interest populated.
-	records, err := z.kite().GetHistoricalData(token, wire.MapTimeframe(batch.Interval), from, to, true, true)
+	records, err := z.kite().GetHistoricalData(
+		token,
+		wire.MapTimeframe(batch.Interval),
+		from,
+		to,
+		wire.MapContinuous(batch.Exchange),
+		true,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch historical data: %w", err)
 	}

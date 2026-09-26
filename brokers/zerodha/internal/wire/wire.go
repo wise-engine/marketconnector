@@ -5,7 +5,11 @@
 // are needed here. It is internal to the zerodha broker package.
 package wire
 
-import "github.com/wise-engine/marketconnector/model"
+import (
+	"strings"
+
+	"github.com/wise-engine/marketconnector/model"
+)
 
 // Zerodha historical-data interval codes accepted by the Kite Connect API.
 const (
@@ -50,6 +54,21 @@ func MapTimeframe(tf model.Timeframe) string {
 		return IntervalDay
 	default:
 		return IntervalDay
+	}
+}
+
+// MapContinuous reports whether the historical request should ask for
+// continuous-contract data. Kite Connect only supports it for derivatives: it
+// chains expired contracts of the same instrument onto a live contract's token
+// (NFO/BFO/MCX). Cash equity (NSE/BSE) rejects the request outright, so those
+// exchanges must be sent continuous=false.
+func MapContinuous(exchange model.Exchange) bool {
+	segment := model.Exchange(strings.ToUpper(strings.TrimSpace(string(exchange))))
+	switch segment {
+	case model.ExchangeNSE, model.ExchangeBSE:
+		return false
+	default:
+		return true
 	}
 }
 
